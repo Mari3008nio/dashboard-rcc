@@ -7,7 +7,7 @@ export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
   const [partidas, setPartidas] = useState([
-    { id: Date.now() + Math.random() * 10000, concepto: "", cantidad: 1, precio_unitario: 0 },
+    { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
   ]);
   const [catalogo, setCatalogo] = useState({});
   const [notificacion, setNotificacion] = useState({
@@ -15,6 +15,7 @@ export default function Cotizacion({ clientePreCargado }) {
     tipo: "",
     mensaje: "",
   });
+  const [debugInfo, setDebugInfo] = useState({});
 
   const fechaActual = new Date().toLocaleDateString();
 
@@ -47,101 +48,120 @@ export default function Cotizacion({ clientePreCargado }) {
         });
       }
       setCatalogo(catObj);
-      console.log("Catálogo cargado:", Object.keys(catObj).length, "servicios");
     } catch (error) {
       console.error("Error cargando catálogo:", error);
     }
   };
 
   const agregarPartida = () => {
-    const nuevoId = Date.now() + Math.random() * 10000;
     setPartidas((prevPartidas) => [
       ...prevPartidas,
-      { id: nuevoId, concepto: "", cantidad: 1, precio_unitario: 0 },
+      { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
     ]);
-    console.log("Nueva partida agregada, total:", partidas.length + 1);
   };
 
   const actualizarPartida = (id, campo, valor) => {
     setPartidas((prevPartidas) =>
       prevPartidas.map((p) => {
-        if (p.id === id) {
-          let valorProcesado = valor;
-          
-          if (campo === "cantidad" || campo === "precio_unitario") {
-            const texto = String(valor || "0").replace(",", ".");
-            valorProcesado = texto === "" ? 0 : parseFloat(texto);
-            if (isNaN(valorProcesado)) valorProcesado = 0;
-          }
-          
-          const nuevaPartida = { ...p, [campo]: valorProcesado };
-          
-          // Auto-completar precio si existe en catálogo y se está editando el concepto
-          if (campo === "concepto" && valor && catalogo[valor] !== undefined) {
+        if (p.id !== id) return p;
+        
+        let nuevaPartida = { ...p };
+        
+        if (campo === "concepto") {
+          nuevaPartida.concepto = valor;
+          if (catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
           }
-          
-          return nuevaPartida;
+        } 
+        else if (campo === "cantidad") {
+          let num = parseFloat(String(valor).replace(",", "."));
+          nuevaPartida.cantidad = isNaN(num) ? 0 : num;
         }
-        return p;
+        else if (campo === "precio_unitario") {
+          let num = parseFloat(String(valor).replace(",", "."));
+          nuevaPartida.precio_unitario = isNaN(num) ? 0 : num;
+        }
+        
+        // Calcular importe
+        nuevaPartida.importe = (nuevaPartida.cantidad || 0) * (nuevaPartida.precio_unitario || 0);
+        
+        return nuevaPartida;
       }),
     );
   };
 
-  // ✅ CORREGIDO: useMemo con validación robusta
-  const { totalParcial, iva, total } = useMemo(() => {
+  // ✅ CÁLCULO DIRECTO - SIN useMemo para evitar problemas de caché
+  const calcularTotales = () => {
     let parcial = 0;
+    console.log("=== CALCULANDO TOTALES ===");
+    console.log("Partidas:", partidas.length);
     
-    for (const item of partidas) {
-      // Validación segura de cantidad
+    for (let i = 0; i < partidas.length; i++) {
+      const p = partidas[i];
       let cantidad = 0;
-      if (item.cantidad !== undefined && item.cantidad !== null && item.cantidad !== "") {
-        const cantStr = String(item.cantidad).replace(",", ".");
-        cantidad = parseFloat(cantStr);
+      let precio = 0;
+      
+      if (p.cantidad !== undefined && p.cantidad !== null && p.cantidad !== "") {
+        cantidad = parseFloat(String(p.cantidad).replace(",", "."));
         if (isNaN(cantidad)) cantidad = 0;
       }
       
-      // Validación segura de precio
-      let precio = 0;
-      if (item.precio_unitario !== undefined && item.precio_unitario !== null && item.precio_unitario !== "") {
-        const precioStr = String(item.precio_unitario).replace(",", ".");
-        precio = parseFloat(precioStr);
+      if (p.precio_unitario !== undefined && p.precio_unitario !== null && p.precio_unitario !== "") {
+        precio = parseFloat(String(p.precio_unitario).replace(",", "."));
         if (isNaN(precio)) precio = 0;
       }
       
-      parcial += cantidad * precio;
+      const importe = cantidad * precio;
+      parcial += importe;
+      
+      console.log(`Partida ${i+1}: cantidad=${cantidad}, precio=${precio}, importe=${importe}`);
     }
     
-    const calcIva = parcial * 0.16;
-    const calcTotal = parcial + calcIva;
+    const iva = parcial * 0.16;
+    const total = parcial + iva;
     
-    return { totalParcial: parcial, iva: calcIva, total: calcTotal };
-  }, [partidas]);
+    console.log(`SUBTOTAL: ${parcial}, IVA: ${iva}, TOTAL: ${total}`);
+    
+    return { totalParcial: parcial, iva, total };
+  };
+  
+  const { totalParcial, iva, total } = calcularTotales();
+  
+  // Actualizar debugInfo cuando cambien partidas
+  useEffect(() => {
+    setDebugInfo({
+      partidasCount: partidas.length,
+      partidasData: partidas.map(p => ({
+        concepto: p.concepto,
+        cantidad: p.cantidad,
+        precio: p.precio_unitario,
+        importe: p.importe
+      })),
+      totales: { totalParcial, iva, total }
+    });
+  }, [partidas, totalParcial, iva, total]);
 
-  const partidasParaPdf = useMemo(() => {
-    return partidas
-      .filter((p) => {
-        const tieneConcepto = p.concepto && p.concepto.trim() !== "";
-        const cantidadValida = p.cantidad > 0 && !isNaN(p.cantidad);
-        const precioValido = p.precio_unitario > 0 && !isNaN(p.precio_unitario);
-        return tieneConcepto && cantidadValida && precioValido;
-      })
-      .map((p) => {
-        const cantidad = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
-        const precio = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
-        return {
-          ...p,
-          cantidad: cantidad,
-          precio_unitario: precio,
-          importe: cantidad * precio,
-        };
-      });
-  }, [partidas]);
+  const partidasParaPdf = partidas
+    .filter((p) => {
+      const tieneConcepto = p.concepto && p.concepto.trim() !== "";
+      const cantidadValida = p.cantidad > 0 && !isNaN(p.cantidad);
+      const precioValido = p.precio_unitario > 0 && !isNaN(p.precio_unitario);
+      return tieneConcepto && cantidadValida && precioValido;
+    })
+    .map((p) => {
+      const cantidad = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
+      const precio = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
+      return {
+        ...p,
+        cantidad: cantidad,
+        precio_unitario: precio,
+        importe: cantidad * precio,
+      };
+    });
 
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    // --- TRUCO PARA EL PDF ---
     const descInputs = pageRef.current.querySelectorAll("input.item-desc");
     const inputsModificados = [];
     
@@ -188,7 +208,6 @@ export default function Cotizacion({ clientePreCargado }) {
       console.error("Error generando PDF:", error);
       return null;
     } finally {
-      // Revertir cambios
       inputsModificados.forEach((input) => {
         input.style.display = "";
         const div = input.parentNode.querySelector(".temp-pdf-div");
@@ -200,7 +219,6 @@ export default function Cotizacion({ clientePreCargado }) {
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
-    // Validar y preparar servicios
     const serviciosParaBackend = [];
     
     for (const p of partidas) {
@@ -220,13 +238,6 @@ export default function Cotizacion({ clientePreCargado }) {
     if (serviciosParaBackend.length === 0) {
       alert("Debes agregar al menos una partida con concepto, cantidad y precio válidos.");
       return;
-    }
-
-    // Validar cliente
-    if (!cliente.nombre || cliente.nombre.trim() === "") {
-      if (!confirm("El cliente no tiene nombre. ¿Deseas continuar de todas formas?")) {
-        return;
-      }
     }
 
     try {
@@ -294,13 +305,11 @@ export default function Cotizacion({ clientePreCargado }) {
           mensaje: "¡LISTO! Cotización guardada y PDF descargado.",
         });
         
-        // Limpiar formulario
         setPartidas([
-          { id: Date.now() + Math.random() * 10000, concepto: "", cantidad: 1, precio_unitario: 0 },
+          { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
         ]);
         setCliente({ id: 0, nombre: "", atencion: "" });
         
-        // Ocultar notificación después de 5 segundos
         setTimeout(() => {
           setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
         }, 5000);
@@ -314,7 +323,7 @@ export default function Cotizacion({ clientePreCargado }) {
         });
       }
     } catch (error) {
-      console.error("Error en enviarCotizacionFinal:", error);
+      console.error("Error:", error);
       setNotificacion({
         mostrar: true,
         tipo: "error",
@@ -323,8 +332,34 @@ export default function Cotizacion({ clientePreCargado }) {
     }
   };
 
+  // Panel de depuración (se muestra en consola)
+  useEffect(() => {
+    console.log("🔍 DEBUG - Estado actual:", debugInfo);
+  }, [debugInfo]);
+
   return (
     <>
+      {/* Panel de depuración visual (solo para debugging, lo puedes quitar después) */}
+      <div style={{ 
+        position: 'fixed', 
+        bottom: 10, 
+        right: 10, 
+        background: '#333', 
+        color: '#0f0', 
+        padding: '10px', 
+        fontSize: '10px', 
+        zIndex: 9999,
+        borderRadius: '5px',
+        maxWidth: '300px',
+        opacity: 0.8
+      }}>
+        <strong>DEBUG:</strong><br />
+        Partidas: {partidas.length}<br />
+        Subtotal: ${totalParcial.toFixed(2)}<br />
+        IVA: ${iva.toFixed(2)}<br />
+        TOTAL: ${total.toFixed(2)}
+      </div>
+
       <div className="page-sim" ref={pageRef}>
         <datalist id="lista-servicios-react">
           {Object.keys(catalogo).map((desc, i) => (
@@ -402,10 +437,7 @@ export default function Cotizacion({ clientePreCargado }) {
           </thead>
           <tbody>
             {partidas.map((p, index) => {
-              const cantidadNum = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
-              const precioNum = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
-              const totalLinea = cantidadNum * precioNum;
-              
+              const importeLinea = (p.cantidad || 0) * (p.precio_unitario || 0);
               return (
                 <tr key={p.id}>
                   <td style={{ textAlign: "center" }}>{index + 1}</td>
@@ -450,7 +482,7 @@ export default function Cotizacion({ clientePreCargado }) {
                     <input
                       type="text"
                       className="item-input item-input-money"
-                      value={totalLinea.toFixed(2)}
+                      value={importeLinea.toFixed(2)}
                       disabled
                       readOnly
                     />
