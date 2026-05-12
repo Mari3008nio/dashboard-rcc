@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Save } from "lucide-react";
 import html2pdf from "html2pdf.js";
@@ -6,25 +6,30 @@ import html2pdf from "html2pdf.js";
 export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
-  const [partidas, setPartidas] = useState([
-    { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
-  ]);
+  const [partidas, setPartidas] = useState([]);
   const [catalogo, setCatalogo] = useState({});
   const [notificacion, setNotificacion] = useState({
     mostrar: false,
     tipo: "",
     mensaje: "",
   });
-  const [debugInfo, setDebugInfo] = useState({});
+  const [resetKey, setResetKey] = useState(0); // 🔑 Forzar reset del componente
 
   const fechaActual = new Date().toLocaleDateString();
+
+  // Inicializar con una partida vacía SOLO cuando el componente se monta o se resetea
+  useEffect(() => {
+    setPartidas([
+      { id: Date.now() + Math.random(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
+    ]);
+  }, [resetKey]);
 
   useEffect(() => {
     cargarCatalogo();
   }, []);
 
   useEffect(() => {
-    if (clientePreCargado) {
+    if (clientePreCargado && clientePreCargado.id !== cliente.id) {
       setCliente({
         id: clientePreCargado.id || 0,
         nombre: clientePreCargado.nombre && clientePreCargado.nombre !== "null" ? clientePreCargado.nombre : "",
@@ -56,11 +61,11 @@ export default function Cotizacion({ clientePreCargado }) {
   const agregarPartida = () => {
     setPartidas((prevPartidas) => [
       ...prevPartidas,
-      { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
+      { id: Date.now() + Math.random(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
     ]);
   };
 
-  const actualizarPartida = (id, campo, valor) => {
+  const actualizarPartida = useCallback((id, campo, valor) => {
     setPartidas((prevPartidas) =>
       prevPartidas.map((p) => {
         if (p.id !== id) return p;
@@ -69,95 +74,49 @@ export default function Cotizacion({ clientePreCargado }) {
         
         if (campo === "concepto") {
           nuevaPartida.concepto = valor;
-          if (catalogo[valor] !== undefined) {
+          if (catalogo[valor] !== undefined && catalogo[valor] > 0) {
             nuevaPartida.precio_unitario = catalogo[valor];
           }
         } 
         else if (campo === "cantidad") {
           let num = parseFloat(String(valor).replace(",", "."));
-          nuevaPartida.cantidad = isNaN(num) ? 0 : num;
+          nuevaPartida.cantidad = isNaN(num) ? 1 : num;
         }
         else if (campo === "precio_unitario") {
           let num = parseFloat(String(valor).replace(",", "."));
           nuevaPartida.precio_unitario = isNaN(num) ? 0 : num;
         }
         
-        // Calcular importe
+        // Recalcular importe
         nuevaPartida.importe = (nuevaPartida.cantidad || 0) * (nuevaPartida.precio_unitario || 0);
         
         return nuevaPartida;
       }),
     );
-  };
+  }, [catalogo]);
 
-  // ✅ CÁLCULO DIRECTO - SIN useMemo para evitar problemas de caché
-  const calcularTotales = () => {
+  // Calcular totales - versión simple y directa
+  const totales = useMemo(() => {
     let parcial = 0;
-    console.log("=== CALCULANDO TOTALES ===");
-    console.log("Partidas:", partidas.length);
     
-    for (let i = 0; i < partidas.length; i++) {
-      const p = partidas[i];
-      let cantidad = 0;
-      let precio = 0;
-      
-      if (p.cantidad !== undefined && p.cantidad !== null && p.cantidad !== "") {
-        cantidad = parseFloat(String(p.cantidad).replace(",", "."));
-        if (isNaN(cantidad)) cantidad = 0;
-      }
-      
-      if (p.precio_unitario !== undefined && p.precio_unitario !== null && p.precio_unitario !== "") {
-        precio = parseFloat(String(p.precio_unitario).replace(",", "."));
-        if (isNaN(precio)) precio = 0;
-      }
-      
-      const importe = cantidad * precio;
+    for (const p of partidas) {
+      const cant = typeof p.cantidad === 'number' ? p.cantidad : parseFloat(p.cantidad || 0);
+      const prec = typeof p.precio_unitario === 'number' ? p.precio_unitario : parseFloat(p.precio_unitario || 0);
+      const importe = (isNaN(cant) ? 0 : cant) * (isNaN(prec) ? 0 : prec);
       parcial += importe;
-      
-      console.log(`Partida ${i+1}: cantidad=${cantidad}, precio=${precio}, importe=${importe}`);
     }
     
     const iva = parcial * 0.16;
     const total = parcial + iva;
     
-    console.log(`SUBTOTAL: ${parcial}, IVA: ${iva}, TOTAL: ${total}`);
-    
     return { totalParcial: parcial, iva, total };
-  };
-  
-  const { totalParcial, iva, total } = calcularTotales();
-  
-  // Actualizar debugInfo cuando cambien partidas
-  useEffect(() => {
-    setDebugInfo({
-      partidasCount: partidas.length,
-      partidasData: partidas.map(p => ({
-        concepto: p.concepto,
-        cantidad: p.cantidad,
-        precio: p.precio_unitario,
-        importe: p.importe
-      })),
-      totales: { totalParcial, iva, total }
-    });
-  }, [partidas, totalParcial, iva, total]);
+  }, [partidas]);
 
-  const partidasParaPdf = partidas
-    .filter((p) => {
-      const tieneConcepto = p.concepto && p.concepto.trim() !== "";
-      const cantidadValida = p.cantidad > 0 && !isNaN(p.cantidad);
-      const precioValido = p.precio_unitario > 0 && !isNaN(p.precio_unitario);
-      return tieneConcepto && cantidadValida && precioValido;
-    })
-    .map((p) => {
-      const cantidad = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
-      const precio = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
-      return {
-        ...p,
-        cantidad: cantidad,
-        precio_unitario: precio,
-        importe: cantidad * precio,
-      };
-    });
+  const limpiarFormulario = useCallback(() => {
+    // Forzar reset del componente generando una nueva key
+    setResetKey(prev => prev + 1);
+    setCliente({ id: 0, nombre: "", atencion: "" });
+  }, []);
 
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
@@ -219,6 +178,7 @@ export default function Cotizacion({ clientePreCargado }) {
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
+    // Validar partidas
     const serviciosParaBackend = [];
     
     for (const p of partidas) {
@@ -226,7 +186,7 @@ export default function Cotizacion({ clientePreCargado }) {
       const cantidad = parseFloat(String(p.cantidad || 0).replace(",", "."));
       const precio = parseFloat(String(p.precio_unitario || 0).replace(",", "."));
       
-      if (concepto !== "" && cantidad > 0 && !isNaN(precio) && precio > 0) {
+      if (concepto !== "" && cantidad > 0 && precio > 0) {
         serviciosParaBackend.push({
           concepto: concepto,
           precio_unitario: precio,
@@ -305,10 +265,8 @@ export default function Cotizacion({ clientePreCargado }) {
           mensaje: "¡LISTO! Cotización guardada y PDF descargado.",
         });
         
-        setPartidas([
-          { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0, importe: 0 },
-        ]);
-        setCliente({ id: 0, nombre: "", atencion: "" });
+        // ✅ LIMPIAR FORMULARIO COMPLETAMENTE
+        limpiarFormulario();
         
         setTimeout(() => {
           setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
@@ -332,34 +290,8 @@ export default function Cotizacion({ clientePreCargado }) {
     }
   };
 
-  // Panel de depuración (se muestra en consola)
-  useEffect(() => {
-    console.log("🔍 DEBUG - Estado actual:", debugInfo);
-  }, [debugInfo]);
-
   return (
-    <>
-      {/* Panel de depuración visual (solo para debugging, lo puedes quitar después) */}
-      <div style={{ 
-        position: 'fixed', 
-        bottom: 10, 
-        right: 10, 
-        background: '#333', 
-        color: '#0f0', 
-        padding: '10px', 
-        fontSize: '10px', 
-        zIndex: 9999,
-        borderRadius: '5px',
-        maxWidth: '300px',
-        opacity: 0.8
-      }}>
-        <strong>DEBUG:</strong><br />
-        Partidas: {partidas.length}<br />
-        Subtotal: ${totalParcial.toFixed(2)}<br />
-        IVA: ${iva.toFixed(2)}<br />
-        TOTAL: ${total.toFixed(2)}
-      </div>
-
+    <div key={resetKey}> {/* 🔑 Forzar rerender completo al resetear */}
       <div className="page-sim" ref={pageRef}>
         <datalist id="lista-servicios-react">
           {Object.keys(catalogo).map((desc, i) => (
@@ -513,13 +445,13 @@ export default function Cotizacion({ clientePreCargado }) {
               <tr>
                 <td className="label-total">TOTAL PARCIAL:</td>
                 <td style={{ fontWeight: "bold", textAlign: "right" }}>
-                  ${totalParcial.toFixed(2)}
+                  ${totales.totalParcial.toFixed(2)}
                 </td>
               </tr>
               <tr>
                 <td className="label-total">IVA (16%):</td>
                 <td style={{ fontWeight: "bold", textAlign: "right" }}>
-                  ${iva.toFixed(2)}
+                  ${totales.iva.toFixed(2)}
                 </td>
               </tr>
               <tr>
@@ -528,7 +460,7 @@ export default function Cotizacion({ clientePreCargado }) {
                   className="final-total"
                   style={{ fontWeight: "bold", textAlign: "right" }}
                 >
-                  ${total.toFixed(2)}
+                  ${totales.total.toFixed(2)}
                 </td>
               </tr>
             </tbody>
@@ -554,6 +486,6 @@ export default function Cotizacion({ clientePreCargado }) {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
