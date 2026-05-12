@@ -2,8 +2,8 @@ body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f4f7f6;
- //* overflow: hidden;
 }
+
 /* Ajuste para React Vite */
 #root {
   display: flex;

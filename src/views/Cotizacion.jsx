@@ -7,7 +7,6 @@ export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
   
-  // SOLUCIÓN CHATGPT: Usar crypto.randomUUID() para evitar colisiones de ID
   const [partidas, setPartidas] = useState([
     { id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }
   ]);
@@ -98,25 +97,19 @@ export default function Cotizacion({ clientePreCargado }) {
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    const descInputs = pageRef.current.querySelectorAll("input.item-desc");
-    descInputs.forEach((input) => {
-      const div = document.createElement("div");
-      div.innerText = input.value;
-      div.className = "temp-pdf-div";
-      div.style.whiteSpace = "pre-wrap";
-      div.style.wordBreak = "break-word";
-      div.style.textAlign = "left";
-      div.style.fontSize = "10pt";
-      input.parentNode.insertBefore(div, input);
-      input.style.display = "none";
-    });
-
+    // Ya no manipulamos el DOM manualmente para los divs temporales.
+    // Usaremos CSS para ocultar los inputs y mostrar los divs durante la creación del PDF.
+    
+    // Solo fijamos los valores de los inputs para que html2canvas los lea correctamente
     const numInputs = pageRef.current.querySelectorAll(
-      "input[type='number'], input[type='text']:not(.item-desc)"
+      "input[type='number'], input[type='text']"
     );
     numInputs.forEach((input) => {
       input.setAttribute("value", input.value);
     });
+
+    // Agregamos una clase temporal al contenedor principal para activar los estilos de impresión
+    pageRef.current.classList.add("pdf-render-mode");
 
     const opciones = {
       margin: [0, 0, 0, 0],
@@ -126,7 +119,6 @@ export default function Cotizacion({ clientePreCargado }) {
     };
 
     try {
-      // SOLUCIÓN CHATGPT: Retardo estratégico para que el navegador pinte el DOM
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const worker = html2pdf().set(opciones).from(pageRef.current);
@@ -135,11 +127,10 @@ export default function Cotizacion({ clientePreCargado }) {
       console.error("Error generando PDF:", error);
       return null;
     } finally {
-      descInputs.forEach((input) => {
-        input.style.display = "";
-        const div = input.parentNode.querySelector(".temp-pdf-div");
-        if (div) div.remove();
-      });
+      // Retiramos la clase temporal
+      if (pageRef.current) {
+        pageRef.current.classList.remove("pdf-render-mode");
+      }
     }
   };
 
@@ -209,7 +200,6 @@ export default function Cotizacion({ clientePreCargado }) {
 
         setNotificacion({ mostrar: true, tipo: "exito", mensaje: "¡LISTO! Cotización guardada y PDF generado." });
 
-        // SOLUCIÓN CHATGPT: Limpieza segura con UUID
         setPartidas([{ id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }]);
         setCliente({ id: 0, nombre: "", atencion: "" });
 
@@ -229,6 +219,25 @@ export default function Cotizacion({ clientePreCargado }) {
 
   return (
     <div style={{ width: "100%" }}>
+      {/* Añadimos estilos globales incrustados para manejar el modo PDF sin ensuciar tu index.css.
+        Cuando se agregue la clase "pdf-render-mode", se ocultan los inputs y se muestran los divs.
+      */}
+      <style>{`
+        .pdf-text-render {
+          display: none;
+          white-space: pre-wrap;
+          word-break: break-word;
+          text-align: left;
+          font-size: 10pt;
+        }
+        .pdf-render-mode .item-desc {
+          display: none !important;
+        }
+        .pdf-render-mode .pdf-text-render {
+          display: block !important;
+        }
+      `}</style>
+
       <div className="page-sim" ref={pageRef}>
         <datalist id="lista-servicios-react">
           {Object.keys(catalogo).map((desc, i) => (
@@ -315,6 +324,8 @@ export default function Cotizacion({ clientePreCargado }) {
                       value={p.concepto}
                       onChange={(e) => actualizarPartida(p.id, "concepto", e.target.value)}
                     />
+                    {/* Div para renderizar en el PDF sin cortes */}
+                    <div className="pdf-text-render">{p.concepto}</div>
                   </td>
                   <td>Servicio</td>
                   <td>
