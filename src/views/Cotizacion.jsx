@@ -400,7 +400,7 @@ export default function Cotizacion({ clientePreCargado }) {
           </tbody>
         </table>
 
-        <button type="button" className="add-row-btn" onClick={agregarPartida}>
+        <button type="button" className="add-row-btn" onClick={agregarPartida} data-html2canvas-ignore="true">
           <PlusCircle size={14} /> Añadir Partida
         </button>
 
@@ -433,21 +433,21 @@ export default function Cotizacion({ clientePreCargado }) {
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div className="submit-container">
-          <button className="btn-submit" onClick={enviarCotizacionFinal}>
-            <Save
-              size={18}
-              style={{ marginRight: "8px", verticalAlign: "middle" }}
-            />
-            GUARDAR COTIZACIÓN Y CREAR PDF
-          </button>
-          {notificacion.mostrar && (
-            <div id="resultadoNotificacion" className={notificacion.tipo}>
-              {notificacion.mensaje}
-            </div>
-          )}
-        </div>
+      <div className="submit-container" data-html2canvas-ignore="true">
+        <button className="btn-submit" onClick={enviarCotizacionFinal} data-html2canvas-ignore="true">
+          <Save
+            size={18}
+            style={{ marginRight: "8px", verticalAlign: "middle" }}
+          />
+          GUARDAR COTIZACIÓN Y CREAR PDF
+        </button>
+        {notificacion.mostrar && (
+          <div id="resultadoNotificacion" className={notificacion.tipo}>
+            {notificacion.mensaje}
+          </div>
+        )}
       </div>
     </>
   );
