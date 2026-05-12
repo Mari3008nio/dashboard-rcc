@@ -71,12 +71,7 @@ export default function Cotizacion({ clientePreCargado }) {
     setPartidas(
       partidas.map((p) => {
         if (p.id === id) {
-          const nuevaPartida = {
-            ...p,
-            [campo]: campo === "precio_unitario" || campo === "cantidad"
-              ? parseNumero(valor)
-              : valor,
-          };
+          const nuevaPartida = { ...p, [campo]: valor };
           // Autocompletar precio si existe en catálogo y se está editando el concepto
           if (campo === "concepto" && catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
@@ -89,16 +84,16 @@ export default function Cotizacion({ clientePreCargado }) {
   };
 
   const { totalParcial, iva, total } = useMemo(() => {
-    const totalParcial = partidas.reduce((acumulador, item) => {
-      const cantidad = parseFloat(item.cantidad) || 0;
-      const precio = parseFloat(item.precio_unitario) || 0;
+    const parcial = partidas.reduce((acumulador, item) => {
+      const cantidad = parseFloat(String(item.cantidad).replace(",", ".")) || 0;
+      const precio = parseFloat(String(item.precio_unitario).replace(",", ".")) || 0;
       return acumulador + cantidad * precio;
     }, 0);
 
-    const iva = totalParcial * 0.16;
-    const total = totalParcial + iva;
+    const calcIva = parcial * 0.16;
+    const calcTotal = parcial + calcIva;
 
-    return { totalParcial, iva, total };
+    return { totalParcial: parcial, iva: calcIva, total: calcTotal };
   }, [partidas]);
 
   const partidasParaPdf = useMemo(
@@ -119,6 +114,16 @@ export default function Cotizacion({ clientePreCargado }) {
 
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
+
+    // --- TRUCO PARA RENDERIZADO DE HTML2PDF ---
+    // Fuerza a los inputs y textareas a reflejar su valor en el DOM físico
+    const elementos = pageRef.current.querySelectorAll("input, textarea");
+    elementos.forEach((el) => {
+      el.setAttribute("value", el.value);
+      if (el.tagName === "TEXTAREA") {
+        el.innerText = el.value;
+      }
+    });
 
     const opciones = {
       margin: [0, 0, 0, 0],
@@ -354,23 +359,24 @@ export default function Cotizacion({ clientePreCargado }) {
             {partidas.map((p, index) => (
               <tr key={p.id}>
                 <td>{index + 1}</td>
-                <td className="col-desc" style={{
-                  whiteSpace: 'normal',
-                  wordWrap: 'break-word',
-                  overflowWrap: 'break-word',
-                  overflow: 'visible',
-                  textOverflow: 'clip',
-                  maxWidth: '300px',
-                }}>
-                  <input
-                    type="text"
+                <td className="col-desc" style={{ padding: 0 }}>
+                  <textarea
                     className="item-input item-desc"
-                    list="lista-servicios-react"
                     placeholder="Escribe o elige un concepto..."
                     value={p.concepto}
                     onChange={(e) =>
                       actualizarPartida(p.id, "concepto", e.target.value)
                     }
+                    rows={2}
+                    style={{
+                      width: "100%",
+                      resize: "none",
+                      fontFamily: "inherit",
+                      border: "none",
+                      background: "transparent",
+                      outline: "none",
+                      overflow: "hidden",
+                    }}
                   />
                 </td>
                 <td>Servicio</td>
@@ -400,9 +406,9 @@ export default function Cotizacion({ clientePreCargado }) {
                 </td>
                 <td>
                   <input
-                    type="number"
+                    type="text"
                     className="item-input item-input-money"
-                    value={(p.cantidad * p.precio_unitario).toFixed(2)}
+                    value={((parseFloat(String(p.cantidad).replace(",", ".")) || 0) * (parseFloat(String(p.precio_unitario).replace(",", ".")) || 0)).toFixed(2)}
                     disabled
                   />
                 </td>
