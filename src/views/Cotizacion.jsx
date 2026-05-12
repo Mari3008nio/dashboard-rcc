@@ -54,12 +54,6 @@ export default function Cotizacion({ clientePreCargado }) {
     }
   };
 
-  const parseNumero = (valor) => {
-    const raw = String(valor).replace(",", ".").trim();
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
   const agregarPartida = () => {
     setPartidas([
       ...partidas,
@@ -115,15 +109,29 @@ export default function Cotizacion({ clientePreCargado }) {
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    // --- TRUCO PARA RENDERIZADO DE HTML2PDF ---
-    // Fuerza a los inputs y textareas a reflejar su valor en el DOM físico
-    const elementos = pageRef.current.querySelectorAll("input, textarea");
-    elementos.forEach((el) => {
-      el.setAttribute("value", el.value);
-      if (el.tagName === "TEXTAREA") {
-        el.innerText = el.value;
-      }
+    // --- TRUCO NIVEL DIOS PARA EL PDF ---
+    // 1. Convertimos el input de texto en un <div> temporal para que el PDF baje de renglón
+    const descInputs = pageRef.current.querySelectorAll("input.item-desc");
+    descInputs.forEach((input) => {
+      const div = document.createElement("div");
+      div.innerText = input.value;
+      div.className = "temp-pdf-div";
+      div.style.whiteSpace = "pre-wrap";
+      div.style.wordBreak = "break-word";
+      div.style.textAlign = "left";
+      div.style.fontSize = "10pt";
+      input.parentNode.insertBefore(div, input);
+      input.style.display = "none"; // Ocultamos el input original
     });
+
+    // 2. Fijamos el valor de los números para que no salgan en blanco
+    const numInputs = pageRef.current.querySelectorAll(
+      "input[type='number'], input[type='text']:not(.item-desc)",
+    );
+    numInputs.forEach((input) => {
+      input.setAttribute("value", input.value);
+    });
+    // ------------------------------------
 
     const opciones = {
       margin: [0, 0, 0, 0],
@@ -153,6 +161,13 @@ export default function Cotizacion({ clientePreCargado }) {
         console.error("Fallo el fallback de html2pdf:", fallbackError);
         return null;
       }
+    } finally {
+      // --- REVERTIMOS EL TRUCO PARA QUE LA PANTALLA NO SE ROMPA ---
+      descInputs.forEach((input) => {
+        input.style.display = ""; // Volvemos a mostrar el input
+        const div = input.parentNode.querySelector(".temp-pdf-div");
+        if (div) div.remove(); // Borramos el texto temporal
+      });
     }
   };
 
@@ -168,8 +183,8 @@ export default function Cotizacion({ clientePreCargado }) {
       )
       .map((p) => ({
         concepto: p.concepto.trim(),
-        precio_unitario: p.precio_unitario,
-        cantidad: p.cantidad,
+        precio_unitario: parseFloat(String(p.precio_unitario).replace(",", ".")) || 0,
+        cantidad: parseFloat(String(p.cantidad).replace(",", ".")) || 0,
       }));
 
     if (serviciosParaBackend.length === 0) {
@@ -244,7 +259,9 @@ export default function Cotizacion({ clientePreCargado }) {
         }
 
         const uploadData = await uploadRespuesta.json();
-        const pdfUrl = uploadData.url || `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
+        const pdfUrl =
+          uploadData.url ||
+          `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
 
         const enlace = document.createElement("a");
         enlace.href = pdfUrl;
@@ -359,24 +376,16 @@ export default function Cotizacion({ clientePreCargado }) {
             {partidas.map((p, index) => (
               <tr key={p.id}>
                 <td>{index + 1}</td>
-                <td className="col-desc" style={{ padding: 0 }}>
-                  <textarea
+                <td className="col-desc">
+                  <input
+                    type="text"
                     className="item-input item-desc"
+                    list="lista-servicios-react"
                     placeholder="Escribe o elige un concepto..."
                     value={p.concepto}
                     onChange={(e) =>
                       actualizarPartida(p.id, "concepto", e.target.value)
                     }
-                    rows={2}
-                    style={{
-                      width: "100%",
-                      resize: "none",
-                      fontFamily: "inherit",
-                      border: "none",
-                      background: "transparent",
-                      outline: "none",
-                      overflow: "hidden",
-                    }}
                   />
                 </td>
                 <td>Servicio</td>
@@ -408,7 +417,10 @@ export default function Cotizacion({ clientePreCargado }) {
                   <input
                     type="text"
                     className="item-input item-input-money"
-                    value={((parseFloat(String(p.cantidad).replace(",", ".")) || 0) * (parseFloat(String(p.precio_unitario).replace(",", ".")) || 0)).toFixed(2)}
+                    value={(
+                      (parseFloat(String(p.cantidad).replace(",", ".")) || 0) *
+                      (parseFloat(String(p.precio_unitario).replace(",", ".")) || 0)
+                    ).toFixed(2)}
                     disabled
                   />
                 </td>
@@ -417,7 +429,12 @@ export default function Cotizacion({ clientePreCargado }) {
           </tbody>
         </table>
 
-        <button type="button" className="add-row-btn" onClick={agregarPartida} data-html2canvas-ignore="true">
+        <button
+          type="button"
+          className="add-row-btn"
+          onClick={agregarPartida}
+          data-html2canvas-ignore="true"
+        >
           <PlusCircle size={14} /> Añadir Partida
         </button>
 
@@ -443,7 +460,10 @@ export default function Cotizacion({ clientePreCargado }) {
               </tr>
               <tr>
                 <td className="label-total final-total">TOTAL:</td>
-                <td className="final-total" style={{ fontWeight: "bold", textAlign: "right" }}>
+                <td
+                  className="final-total"
+                  style={{ fontWeight: "bold", textAlign: "right" }}
+                >
                   ${total.toFixed(2)}
                 </td>
               </tr>
@@ -453,7 +473,11 @@ export default function Cotizacion({ clientePreCargado }) {
       </div>
 
       <div className="submit-container" data-html2canvas-ignore="true">
-        <button className="btn-submit" onClick={enviarCotizacionFinal} data-html2canvas-ignore="true">
+        <button
+          className="btn-submit"
+          onClick={enviarCotizacionFinal}
+          data-html2canvas-ignore="true"
+        >
           <Save
             size={18}
             style={{ marginRight: "8px", verticalAlign: "middle" }}
