@@ -65,7 +65,12 @@ export default function Cotizacion({ clientePreCargado }) {
     setPartidas(
       partidas.map((p) => {
         if (p.id === id) {
-          const nuevaPartida = { ...p, [campo]: valor };
+          const nuevaPartida = {
+            ...p,
+            [campo]: campo === "precio_unitario" || campo === "cantidad"
+              ? Number(valor) || 0
+              : valor,
+          };
           // Autocompletar precio si existe en catálogo y se está editando el concepto
           if (campo === "concepto" && catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
@@ -78,11 +83,11 @@ export default function Cotizacion({ clientePreCargado }) {
   };
 
   const calculos = useMemo(() => {
-    let subtotal = partidas.reduce(
-      (acc, p) => acc + p.cantidad * p.precio_unitario,
+    const subtotal = partidas.reduce(
+      (acc, p) => acc + Number(p.cantidad) * Number(p.precio_unitario),
       0,
     );
-    let iva = subtotal * 0.16;
+    const iva = subtotal * 0.16;
     return { subtotal, iva, total: subtotal + iva };
   }, [partidas]);
 
@@ -121,9 +126,19 @@ export default function Cotizacion({ clientePreCargado }) {
       pagebreak: { mode: ["css", "legacy"] },
     };
 
-    const worker = html2pdf().set(opciones).from(pageRef.current);
-    const blob = await worker.outputPdf("blob");
-    return blob;
+    try {
+      const worker = html2pdf().set(opciones).from(pageRef.current);
+      return await worker.outputPdf("blob");
+    } catch (error) {
+      console.error("Error generando PDF con html2pdf outputPdf:", error);
+      try {
+        const worker = html2pdf().set(opciones).from(pageRef.current);
+        return await worker.output("blob");
+      } catch (fallbackError) {
+        console.error("Fallo el fallback de html2pdf:", fallbackError);
+        return null;
+      }
+    }
   };
 
   const enviarCotizacionFinal = async () => {
@@ -180,7 +195,7 @@ export default function Cotizacion({ clientePreCargado }) {
         }
 
         const formData = new FormData();
-        formData.append("pdf", pdfBlob, `cotizacion_${data?.folio}.pdf`);
+        formData.append("archivo", pdfBlob, `cotizacion_${data?.folio}.pdf`);
 
         const uploadRespuesta = await fetchSeguro(
           `https://astonishing-determination-production.up.railway.app/api/v1/cotizaciones/subir-pdf/${data?.folio}`,
@@ -191,11 +206,24 @@ export default function Cotizacion({ clientePreCargado }) {
         );
 
         if (!uploadRespuesta.ok) {
-          const datosError = await uploadRespuesta.json();
+          const textoRespuesta = await uploadRespuesta.text();
+          let datosError = null;
+          try {
+            datosError = JSON.parse(textoRespuesta);
+          } catch {
+            datosError = textoRespuesta;
+          }
+
+          const detalleError = datosError
+            ? typeof datosError.detail === "object"
+              ? JSON.stringify(datosError.detail)
+              : datosError.detail || datosError.mensaje || datosError
+            : uploadRespuesta.statusText;
+
           setNotificacion({
             mostrar: true,
             tipo: "error",
-            mensaje: `Error al guardar el PDF en el servidor: ${datosError.detail || "Fallo"}`,
+            mensaje: `Error al guardar el PDF en el servidor: ${detalleError}`,
           });
           return;
         }
