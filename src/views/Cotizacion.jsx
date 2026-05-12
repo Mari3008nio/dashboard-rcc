@@ -65,7 +65,14 @@ export default function Cotizacion({ clientePreCargado }) {
     setPartidas(
       partidas.map((p) => {
         if (p.id === id) {
-          const nuevaPartida = { ...p, [campo]: valor };
+          let valorProcesado = valor;
+
+          if (campo === "cantidad" || campo === "precio_unitario") {
+            const texto = String(valor).replace(",", ".");
+            valorProcesado = texto === "" ? 0 : Number(texto);
+          }
+
+          const nuevaPartida = { ...p, [campo]: valorProcesado };
           // Autocompletar precio si existe en catálogo y se está editando el concepto
           if (campo === "concepto" && catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
@@ -79,8 +86,8 @@ export default function Cotizacion({ clientePreCargado }) {
 
   const { totalParcial, iva, total } = useMemo(() => {
     const parcial = partidas.reduce((acumulador, item) => {
-      const cantidad = parseFloat(String(item.cantidad).replace(",", ".")) || 0;
-      const precio = parseFloat(String(item.precio_unitario).replace(",", ".")) || 0;
+      const cantidad = Number(String(item.cantidad).replace(",", ".")) || 0;
+      const precio = Number(String(item.precio_unitario).replace(",", ".")) || 0;
       return acumulador + cantidad * precio;
     }, 0);
 
@@ -96,12 +103,16 @@ export default function Cotizacion({ clientePreCargado }) {
         .filter(
           (p) =>
             p.concepto.trim() !== "" &&
-            p.cantidad > 0 &&
-            !isNaN(p.precio_unitario),
+            Number(p.cantidad) > 0 &&
+            !isNaN(Number(p.precio_unitario)),
         )
         .map((p) => ({
           ...p,
-          importe: p.cantidad * p.precio_unitario,
+          cantidad: Number(String(p.cantidad).replace(",", ".")) || 0,
+          precio_unitario: Number(String(p.precio_unitario).replace(",", ".")) || 0,
+          importe:
+            (Number(String(p.cantidad).replace(",", ".")) || 0) *
+            (Number(String(p.precio_unitario).replace(",", ".")) || 0),
         })),
     [partidas],
   );
