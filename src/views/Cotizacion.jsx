@@ -88,13 +88,17 @@ export default function Cotizacion({ clientePreCargado }) {
     );
   };
 
-  const calculos = useMemo(() => {
-    const subtotal = partidas.reduce(
-      (acc, p) => acc + Number(p.cantidad) * Number(p.precio_unitario),
-      0,
-    );
-    const iva = subtotal * 0.16;
-    return { subtotal, iva, total: subtotal + iva };
+  const { totalParcial, iva, total } = useMemo(() => {
+    const totalParcial = partidas.reduce((acumulador, item) => {
+      const cantidad = parseFloat(item.cantidad) || 0;
+      const precio = parseFloat(item.precio_unitario) || 0;
+      return acumulador + cantidad * precio;
+    }, 0);
+
+    const iva = totalParcial * 0.16;
+    const total = totalParcial + iva;
+
+    return { totalParcial, iva, total };
   }, [partidas]);
 
   const partidasParaPdf = useMemo(
@@ -350,7 +354,14 @@ export default function Cotizacion({ clientePreCargado }) {
             {partidas.map((p, index) => (
               <tr key={p.id}>
                 <td>{index + 1}</td>
-                <td className="col-desc">
+                <td className="col-desc" style={{
+                  whiteSpace: 'normal',
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word',
+                  overflow: 'visible',
+                  textOverflow: 'clip',
+                  maxWidth: '300px',
+                }}>
                   <input
                     type="text"
                     className="item-input item-desc"
@@ -413,21 +424,21 @@ export default function Cotizacion({ clientePreCargado }) {
           <table className="totals-box">
             <tbody>
               <tr>
-                <td className="label-total">SUBTOTAL:</td>
+                <td className="label-total">TOTAL PARCIAL:</td>
                 <td style={{ fontWeight: "bold", textAlign: "right" }}>
-                  ${calculos.subtotal.toFixed(2)}
+                  ${totalParcial.toFixed(2)}
                 </td>
               </tr>
               <tr>
                 <td className="label-total">IVA (16%):</td>
                 <td style={{ fontWeight: "bold", textAlign: "right" }}>
-                  ${calculos.iva.toFixed(2)}
+                  ${iva.toFixed(2)}
                 </td>
               </tr>
               <tr>
                 <td className="label-total final-total">TOTAL:</td>
                 <td className="final-total" style={{ fontWeight: "bold", textAlign: "right" }}>
-                  ${calculos.total.toFixed(2)}
+                  ${total.toFixed(2)}
                 </td>
               </tr>
             </tbody>

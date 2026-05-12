@@ -369,15 +369,23 @@ body {
   padding: 2px;
   box-sizing: border-box;
   white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .item-input:focus {
   border-bottom: 1px dashed #3498db;
 }
 .item-desc {
   text-align: left;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .item-input-money {
   text-align: right;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .add-row-btn {
   background-color: #28a745;
