@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Save, Trash2 } from "lucide-react";
 import html2pdf from "html2pdf.js";
 
 export default function Cotizacion({ clientePreCargado }) {
-  const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
-  
   const [partidas, setPartidas] = useState([
     { id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }
   ]);
-  
   const [catalogo, setCatalogo] = useState({});
   const [notificacion, setNotificacion] = useState({
     mostrar: false,
     tipo: "",
     mensaje: "",
   });
+  
+  // ESTA ES LA MAGIA: Un interruptor que convierte inputs en texto para la foto
+  const [isPdfMode, setIsPdfMode] = useState(false);
 
   const fechaActual = new Date().toLocaleDateString();
 
@@ -95,21 +95,18 @@ export default function Cotizacion({ clientePreCargado }) {
   }, [partidas]);
 
   const generarPdfBlob = async () => {
-    if (!pageRef.current) return null;
-
-    // Ya no manipulamos el DOM manualmente para los divs temporales.
-    // Usaremos CSS para ocultar los inputs y mostrar los divs durante la creación del PDF.
+    // 1. Activamos el modo PDF (React convierte los inputs a texto puro)
+    setIsPdfMode(true);
     
-    // Solo fijamos los valores de los inputs para que html2canvas los lea correctamente
-    const numInputs = pageRef.current.querySelectorAll(
-      "input[type='number'], input[type='text']"
-    );
-    numInputs.forEach((input) => {
-      input.setAttribute("value", input.value);
-    });
+    // 2. Le damos tiempo a React de pintar la pantalla (Medio segundo)
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Agregamos una clase temporal al contenedor principal para activar los estilos de impresión
-    pageRef.current.classList.add("pdf-render-mode");
+    // 3. Tomamos el contenedor de forma segura sin referencias mutables
+    const elemento = document.getElementById("documento-pdf");
+    if (!elemento) {
+      setIsPdfMode(false);
+      return null;
+    }
 
     const opciones = {
       margin: [0, 0, 0, 0],
@@ -119,18 +116,15 @@ export default function Cotizacion({ clientePreCargado }) {
     };
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const worker = html2pdf().set(opciones).from(pageRef.current);
-      return await worker.outputPdf("blob");
+      const worker = html2pdf().set(opciones).from(elemento);
+      const blob = await worker.outputPdf("blob");
+      // 4. Apagamos el modo PDF para que puedas seguir trabajando
+      setIsPdfMode(false);
+      return blob;
     } catch (error) {
       console.error("Error generando PDF:", error);
+      setIsPdfMode(false);
       return null;
-    } finally {
-      // Retiramos la clase temporal
-      if (pageRef.current) {
-        pageRef.current.classList.remove("pdf-render-mode");
-      }
     }
   };
 
@@ -173,8 +167,9 @@ export default function Cotizacion({ clientePreCargado }) {
 
       if (respuesta.ok) {
         const data = await respuesta.json();
+        
+        // Bloque de generación de PDF
         const pdfBlob = await generarPdfBlob();
-
         if (!pdfBlob) {
           setNotificacion({ mostrar: true, tipo: "error", mensaje: "No se pudo generar el PDF." });
           return;
@@ -219,26 +214,8 @@ export default function Cotizacion({ clientePreCargado }) {
 
   return (
     <div style={{ width: "100%" }}>
-      {/* Añadimos estilos globales incrustados para manejar el modo PDF sin ensuciar tu index.css.
-        Cuando se agregue la clase "pdf-render-mode", se ocultan los inputs y se muestran los divs.
-      */}
-      <style>{`
-        .pdf-text-render {
-          display: none;
-          white-space: pre-wrap;
-          word-break: break-word;
-          text-align: left;
-          font-size: 10pt;
-        }
-        .pdf-render-mode .item-desc {
-          display: none !important;
-        }
-        .pdf-render-mode .pdf-text-render {
-          display: block !important;
-        }
-      `}</style>
-
-      <div className="page-sim" ref={pageRef}>
+      {/* Usamos un ID seguro en lugar de useRef para evitar colapsos */}
+      <div className="page-sim" id="documento-pdf">
         <datalist id="lista-servicios-react">
           {Object.keys(catalogo).map((desc, i) => (
             <option key={i} value={desc} />
@@ -268,13 +245,19 @@ export default function Cotizacion({ clientePreCargado }) {
         <div className="top-info-row">
           <div>
             <strong>CLIENTE:</strong>
-            <input
-              type="text"
-              value={cliente.nombre}
-              onChange={(e) => setCliente({ ...cliente, nombre: e.target.value })}
-              maxLength="65"
-              placeholder="Nombre del cliente"
-            />
+            {!isPdfMode ? (
+              <input
+                type="text"
+                value={cliente.nombre}
+                onChange={(e) => setCliente({ ...cliente, nombre: e.target.value })}
+                maxLength="65"
+                placeholder="Nombre del cliente"
+              />
+            ) : (
+              <span style={{ borderBottom: "1px solid #000", display: "inline-block", minWidth: "300px", padding: "2px" }}>
+                {cliente.nombre}
+              </span>
+            )}
           </div>
           <div>
             <strong>FECHA:</strong> <span>{fechaActual}</span>
@@ -283,13 +266,19 @@ export default function Cotizacion({ clientePreCargado }) {
 
         <div className="atencion-row">
           <strong>ATENCIÓN:</strong>
-          <input
-            type="text"
-            value={cliente.atencion}
-            onChange={(e) => setCliente({ ...cliente, atencion: e.target.value })}
-            maxLength="65"
-            placeholder="Persona de contacto"
-          />
+          {!isPdfMode ? (
+            <input
+              type="text"
+              value={cliente.atencion}
+              onChange={(e) => setCliente({ ...cliente, atencion: e.target.value })}
+              maxLength="65"
+              placeholder="Persona de contacto"
+            />
+          ) : (
+            <span style={{ borderBottom: "1px solid #000", display: "inline-block", minWidth: "400px", padding: "2px" }}>
+              {cliente.atencion}
+            </span>
+          )}
         </div>
 
         <div className="intro-text">Atendiendo sus indicaciones presentamos cotización:</div>
@@ -303,7 +292,8 @@ export default function Cotizacion({ clientePreCargado }) {
               <th>CANTIDAD</th>
               <th>PRECIO U.</th>
               <th>TOTAL</th>
-              <th data-html2canvas-ignore="true"></th>
+              {/* Ocultamos la columna del basurero en el PDF */}
+              {!isPdfMode && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -315,67 +305,103 @@ export default function Cotizacion({ clientePreCargado }) {
               return (
                 <tr key={p.id}>
                   <td style={{ textAlign: "center" }}>{index + 1}</td>
+                  
+                  {/* Celda de Descripción: Alterna entre Input y Texto Plano Expandible */}
                   <td className="col-desc">
-                    <input
-                      type="text"
-                      className="item-input item-desc"
-                      list="lista-servicios-react"
-                      placeholder="Escribe o elige un concepto..."
-                      value={p.concepto}
-                      onChange={(e) => actualizarPartida(p.id, "concepto", e.target.value)}
-                    />
-                    {/* Div para renderizar en el PDF sin cortes */}
-                    <div className="pdf-text-render">{p.concepto}</div>
+                    {!isPdfMode ? (
+                      <input
+                        type="text"
+                        className="item-input item-desc"
+                        list="lista-servicios-react"
+                        placeholder="Escribe o elige un concepto..."
+                        value={p.concepto}
+                        onChange={(e) => actualizarPartida(p.id, "concepto", e.target.value)}
+                      />
+                    ) : (
+                      <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", textAlign: "left", fontSize: "10pt", padding: "2px" }}>
+                        {p.concepto}
+                      </div>
+                    )}
                   </td>
+                  
                   <td>Servicio</td>
+                  
+                  {/* Celda Cantidad */}
                   <td>
-                    <input
-                      type="number"
-                      className="item-input item-input-cant"
-                      min="1"
-                      step="1"
-                      value={p.cantidad}
-                      onChange={(e) => actualizarPartida(p.id, "cantidad", e.target.value)}
-                    />
+                    {!isPdfMode ? (
+                      <input
+                        type="number"
+                        className="item-input item-input-cant"
+                        min="1"
+                        step="1"
+                        value={p.cantidad}
+                        onChange={(e) => actualizarPartida(p.id, "cantidad", e.target.value)}
+                      />
+                    ) : (
+                      <div style={{ textAlign: "center", fontSize: "10pt", padding: "2px" }}>{p.cantidad}</div>
+                    )}
                   </td>
+                  
+                  {/* Celda Precio */}
                   <td>
-                    <input
-                      type="number"
-                      className="item-input item-input-money"
-                      min="0"
-                      step="0.01"
-                      value={p.precio_unitario}
-                      onChange={(e) => actualizarPartida(p.id, "precio_unitario", e.target.value)}
-                    />
+                    {!isPdfMode ? (
+                      <input
+                        type="number"
+                        className="item-input item-input-money"
+                        min="0"
+                        step="0.01"
+                        value={p.precio_unitario}
+                        onChange={(e) => actualizarPartida(p.id, "precio_unitario", e.target.value)}
+                      />
+                    ) : (
+                      <div style={{ textAlign: "right", fontSize: "10pt", padding: "2px" }}>
+                        ${parseFloat(p.precio_unitario || 0).toFixed(2)}
+                      </div>
+                    )}
                   </td>
+                  
+                  {/* Celda Total */}
                   <td>
-                    <input
-                      type="text"
-                      className="item-input item-input-money"
-                      value={importeLinea.toFixed(2)}
-                      disabled
-                      readOnly
-                    />
+                    {!isPdfMode ? (
+                      <input
+                        type="text"
+                        className="item-input item-input-money"
+                        value={importeLinea.toFixed(2)}
+                        disabled
+                        readOnly
+                      />
+                    ) : (
+                      <div style={{ textAlign: "right", fontSize: "10pt", padding: "2px" }}>
+                        ${importeLinea.toFixed(2)}
+                      </div>
+                    )}
                   </td>
-                  <td data-html2canvas-ignore="true">
-                    <button
-                      type="button"
-                      className="btn-pdf"
-                      onClick={() => eliminarPartida(p.id)}
-                      style={{ background: "#e74c3c", padding: "4px 8px", minWidth: "30px", minHeight: "30px" }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </td>
+
+                  {/* Botón Borrar: Se esconde completamente al tomar la foto */}
+                  {!isPdfMode && (
+                    <td>
+                      <button
+                        type="button"
+                        className="btn-pdf"
+                        onClick={() => eliminarPartida(p.id)}
+                        style={{ background: "#e74c3c", padding: "4px 8px", minWidth: "30px", minHeight: "30px" }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
           </tbody>
         </table>
 
-        <button type="button" className="add-row-btn" onClick={agregarPartida} data-html2canvas-ignore="true">
-          <PlusCircle size={14} /> Añadir Partida
-        </button>
+        {/* Escondemos el botón de agregar cuando es PDF */}
+        {!isPdfMode && (
+          <button type="button" className="add-row-btn" onClick={agregarPartida}>
+            <PlusCircle size={14} /> Añadir Partida
+          </button>
+        )}
 
         <div className="post-table-section">
           <div className="avisos">
@@ -403,17 +429,20 @@ export default function Cotizacion({ clientePreCargado }) {
         </div>
       </div>
 
-      <div className="submit-container" data-html2canvas-ignore="true">
-        <button className="btn-submit" onClick={enviarCotizacionFinal}>
-          <Save size={18} style={{ marginRight: "8px", verticalAlign: "middle" }} />
-          GUARDAR COTIZACIÓN Y CREAR PDF
-        </button>
-        {notificacion.mostrar && (
-          <div id="resultadoNotificacion" className={notificacion.tipo}>
-            {notificacion.mensaje}
-          </div>
-        )}
-      </div>
+      {/* Botón Guardar */}
+      {!isPdfMode && (
+        <div className="submit-container">
+          <button className="btn-submit" onClick={enviarCotizacionFinal}>
+            <Save size={18} style={{ marginRight: "8px", verticalAlign: "middle" }} />
+            GUARDAR COTIZACIÓN Y CREAR PDF
+          </button>
+          {notificacion.mostrar && (
+            <div id="resultadoNotificacion" className={notificacion.tipo}>
+              {notificacion.mensaje}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
