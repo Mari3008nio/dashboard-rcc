@@ -6,9 +6,12 @@ import html2pdf from "html2pdf.js";
 export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
+  
+  // SOLUCIÓN CHATGPT: Usar crypto.randomUUID() para evitar colisiones de ID
   const [partidas, setPartidas] = useState([
-    { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: "" }
+    { id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }
   ]);
+  
   const [catalogo, setCatalogo] = useState({});
   const [notificacion, setNotificacion] = useState({
     mostrar: false,
@@ -18,7 +21,6 @@ export default function Cotizacion({ clientePreCargado }) {
 
   const fechaActual = new Date().toLocaleDateString();
 
-  // Cargar catálogo una sola vez
   useEffect(() => {
     const cargarCatalogo = async () => {
       try {
@@ -40,7 +42,6 @@ export default function Cotizacion({ clientePreCargado }) {
     cargarCatalogo();
   }, []);
 
-  // Precargar cliente
   useEffect(() => {
     if (clientePreCargado) {
       setCliente({
@@ -54,7 +55,7 @@ export default function Cotizacion({ clientePreCargado }) {
   const agregarPartida = () => {
     setPartidas([
       ...partidas,
-      { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: "" }
+      { id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }
     ]);
   };
 
@@ -66,13 +67,11 @@ export default function Cotizacion({ clientePreCargado }) {
     setPartidas(partidas.filter((p) => p.id !== id));
   };
 
-  // Función limpia: solo guarda lo que escribes, sin forzar formatos
   const actualizarPartida = (id, campo, valor) => {
     setPartidas(
       partidas.map((p) => {
         if (p.id === id) {
           const nuevaPartida = { ...p, [campo]: valor };
-          // Autocompletar precio si el concepto está en el catálogo
           if (campo === "concepto" && catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
           }
@@ -83,10 +82,8 @@ export default function Cotizacion({ clientePreCargado }) {
     );
   };
 
-  // Cálculo de totales a prueba de fallos
   const { totalParcial, iva, total } = useMemo(() => {
     const parcial = partidas.reduce((acumulador, item) => {
-      // Extraemos el número seguro convirtiendo comas a puntos
       const cantidad = parseFloat(String(item.cantidad).replace(",", ".")) || 0;
       const precio = parseFloat(String(item.precio_unitario).replace(",", ".")) || 0;
       return acumulador + (cantidad * precio);
@@ -101,8 +98,6 @@ export default function Cotizacion({ clientePreCargado }) {
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    // --- TRUCO NIVEL DIOS PARA EL PDF ---
-    // 1. Convertimos los inputs de texto largo en un <div> para no cortar texto
     const descInputs = pageRef.current.querySelectorAll("input.item-desc");
     descInputs.forEach((input) => {
       const div = document.createElement("div");
@@ -113,10 +108,9 @@ export default function Cotizacion({ clientePreCargado }) {
       div.style.textAlign = "left";
       div.style.fontSize = "10pt";
       input.parentNode.insertBefore(div, input);
-      input.style.display = "none"; 
+      input.style.display = "none";
     });
 
-    // 2. Fijamos los números para que la cámara del PDF los vea
     const numInputs = pageRef.current.querySelectorAll(
       "input[type='number'], input[type='text']:not(.item-desc)"
     );
@@ -132,13 +126,15 @@ export default function Cotizacion({ clientePreCargado }) {
     };
 
     try {
+      // SOLUCIÓN CHATGPT: Retardo estratégico para que el navegador pinte el DOM
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       const worker = html2pdf().set(opciones).from(pageRef.current);
       return await worker.outputPdf("blob");
     } catch (error) {
       console.error("Error generando PDF:", error);
       return null;
     } finally {
-      // --- REVERTIMOS EL TRUCO PARA QUE PUEDAS SEGUIR COTIZANDO ---
       descInputs.forEach((input) => {
         input.style.display = "";
         const div = input.parentNode.querySelector(".temp-pdf-div");
@@ -150,7 +146,6 @@ export default function Cotizacion({ clientePreCargado }) {
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
-    // Preparamos los datos limpios para la BD
     const serviciosParaBackend = partidas
       .filter((p) => {
         const cant = parseFloat(String(p.cantidad).replace(",", ".")) || 0;
@@ -212,10 +207,10 @@ export default function Cotizacion({ clientePreCargado }) {
         enlace.click();
         document.body.removeChild(enlace);
 
-        setNotificacion({ mostrar: true, tipo: "exito", mensaje: "¡LISTO! Cotización guardada." });
+        setNotificacion({ mostrar: true, tipo: "exito", mensaje: "¡LISTO! Cotización guardada y PDF generado." });
 
-        // ✅ RESET LIMPIO Y DIRECTO PARA LA SIGUIENTE COTIZACIÓN
-        setPartidas([{ id: Date.now(), concepto: "", cantidad: 1, precio_unitario: "" }]);
+        // SOLUCIÓN CHATGPT: Limpieza segura con UUID
+        setPartidas([{ id: crypto.randomUUID(), concepto: "", cantidad: 1, precio_unitario: "" }]);
         setCliente({ id: 0, nombre: "", atencion: "" });
 
         setTimeout(() => {
@@ -336,9 +331,9 @@ export default function Cotizacion({ clientePreCargado }) {
                     <input
                       type="number"
                       className="item-input item-input-money"
-                      value={p.precio_unitario}
                       min="0"
                       step="0.01"
+                      value={p.precio_unitario}
                       onChange={(e) => actualizarPartida(p.id, "precio_unitario", e.target.value)}
                     />
                   </td>
@@ -356,7 +351,7 @@ export default function Cotizacion({ clientePreCargado }) {
                       type="button"
                       className="btn-pdf"
                       onClick={() => eliminarPartida(p.id)}
-                      style={{ background: "#e74c3c", padding: "4px 8px" }}
+                      style={{ background: "#e74c3c", padding: "4px 8px", minWidth: "30px", minHeight: "30px" }}
                     >
                       <Trash2 size={12} />
                     </button>
