@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Save } from "lucide-react";
-import html2pdf from "html2pdf.js";
 
 export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
-  const pdfRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
   const [partidas, setPartidas] = useState([
     { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
@@ -103,30 +101,6 @@ export default function Cotizacion({ clientePreCargado }) {
     [partidas],
   );
 
-  const generarPdfEnFrontend = async (folio) => {
-    if (!pdfRef.current) return;
-
-    const nombreArchivo = `cotizacion_${folio || Date.now()}.pdf`;
-    const opciones = {
-      margin: [0, 0, 0, 0],
-      filename: nombreArchivo,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      },
-      jsPDF: {
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-      },
-      pagebreak: { mode: ["css", "legacy"] },
-    };
-
-    await html2pdf().set(opciones).from(pdfRef.current).save();
-  };
-
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
@@ -169,7 +143,15 @@ export default function Cotizacion({ clientePreCargado }) {
 
       if (respuesta.ok) {
         const data = await respuesta.json();
-        await generarPdfEnFrontend(data?.folio);
+        
+        // Descargar el PDF generado en el servidor
+        const pdfUrl = `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
+        const enlace = document.createElement('a');
+        enlace.href = pdfUrl;
+        enlace.download = `cotizacion_${data?.folio}.pdf`;
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
 
         setNotificacion({
           mostrar: true,
