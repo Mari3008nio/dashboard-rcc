@@ -62,6 +62,7 @@ export default function Cotizacion({ clientePreCargado }) {
   };
 
   const actualizarPartida = (id, campo, valor) => {
+    console.log("Cotizacion: actualizarPartida", { id, campo, valor });
     setPartidas((prevPartidas) =>
       prevPartidas.map((p) => {
         if (p.id === id) {
@@ -83,6 +84,10 @@ export default function Cotizacion({ clientePreCargado }) {
       }),
     );
   };
+
+  useEffect(() => {
+    console.log("Cotizacion: partidas actualizadas", partidas);
+  }, [partidas]);
 
   const { totalParcial, iva, total } = useMemo(() => {
     const parcial = partidas.reduce((acumulador, item) => {
