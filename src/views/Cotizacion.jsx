@@ -1,0 +1,511 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { fetchSeguro } from "../utils/api";
+import { PlusCircle, Save } from "lucide-react";
+import html2pdf from "html2pdf.js";
+
+export default function Cotizacion({ clientePreCargado }) {
+  const pageRef = useRef(null);
+  const pdfRef = useRef(null);
+  const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
+  const [partidas, setPartidas] = useState([
+    { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+  ]);
+  const [catalogo, setCatalogo] = useState({});
+  const [notificacion, setNotificacion] = useState({
+    mostrar: false,
+    tipo: "",
+    mensaje: "",
+  });
+
+  const fechaActual = new Date().toLocaleDateString();
+
+  useEffect(() => {
+    cargarCatalogo();
+  }, []);
+
+  useEffect(() => {
+    if (clientePreCargado) {
+      setCliente({
+        id: clientePreCargado.id,
+        nombre:
+          clientePreCargado.nombre !== "null" ? clientePreCargado.nombre : "",
+        atencion:
+          clientePreCargado.atencion !== "null"
+            ? clientePreCargado.atencion
+            : "",
+      });
+    }
+  }, [clientePreCargado]);
+
+  const cargarCatalogo = async () => {
+    try {
+      const respuesta = await fetchSeguro(
+        "http://127.0.0.1:8000/api/v1/servicios/listar",
+      );
+      const datos = await respuesta.json();
+      const catObj = {};
+      if (datos.servicios) {
+        datos.servicios.forEach((serv) => {
+          catObj[serv.descripcion] = parseFloat(serv.precio);
+        });
+      }
+      setCatalogo(catObj);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const agregarPartida = () => {
+    setPartidas([
+      ...partidas,
+      { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+    ]);
+  };
+
+  const actualizarPartida = (id, campo, valor) => {
+    setPartidas(
+      partidas.map((p) => {
+        if (p.id === id) {
+          const nuevaPartida = { ...p, [campo]: valor };
+          // Autocompletar precio si existe en catálogo y se está editando el concepto
+          if (campo === "concepto" && catalogo[valor] !== undefined) {
+            nuevaPartida.precio_unitario = catalogo[valor];
+          }
+          return nuevaPartida;
+        }
+        return p;
+      }),
+    );
+  };
+
+  const calculos = useMemo(() => {
+    let subtotal = partidas.reduce(
+      (acc, p) => acc + p.cantidad * p.precio_unitario,
+      0,
+    );
+    let iva = subtotal * 0.16;
+    return { subtotal, iva, total: subtotal + iva };
+  }, [partidas]);
+
+  const partidasParaPdf = useMemo(
+    () =>
+      partidas
+        .filter(
+          (p) =>
+            p.concepto.trim() !== "" &&
+            p.cantidad > 0 &&
+            !isNaN(p.precio_unitario),
+        )
+        .map((p) => ({
+          ...p,
+          importe: p.cantidad * p.precio_unitario,
+        })),
+    [partidas],
+  );
+
+  const generarPdfEnFrontend = async (folio) => {
+    if (!pdfRef.current) return;
+
+    const nombreArchivo = `cotizacion_${folio || Date.now()}.pdf`;
+    const opciones = {
+      margin: [0, 0, 0, 0],
+      filename: nombreArchivo,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      },
+      pagebreak: { mode: ["css", "legacy"] },
+    };
+
+    await html2pdf().set(opciones).from(pdfRef.current).save();
+  };
+
+  const enviarCotizacionFinal = async () => {
+    setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
+
+    const serviciosParaBackend = partidas
+      .filter(
+        (p) =>
+          p.concepto.trim() !== "" &&
+          p.cantidad > 0 &&
+          !isNaN(p.precio_unitario),
+      )
+      .map((p) => ({
+        concepto: p.concepto.trim(),
+        precio_unitario: p.precio_unitario,
+        cantidad: p.cantidad,
+      }));
+
+    if (serviciosParaBackend.length === 0) {
+      alert(
+        "Debes agregar al menos una partida con texto y precio a la tabla.",
+      );
+      return;
+    }
+
+    try {
+      const respuesta = await fetchSeguro(
+        "http://127.0.0.1:8000/api/v1/cotizaciones/generar",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cliente: {
+              id_cliente: cliente.id,
+              nombre: cliente.nombre,
+              atencion: cliente.atencion,
+            },
+            servicios: serviciosParaBackend,
+          }),
+        },
+      );
+
+      if (respuesta.ok) {
+        const data = await respuesta.json();
+        await generarPdfEnFrontend(data?.folio);
+
+        setNotificacion({
+          mostrar: true,
+          tipo: "exito",
+          mensaje: "¡LISTO! Cotización guardada y PDF descargado.",
+        });
+        // Limpiar form
+        setPartidas([
+          { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+        ]);
+        setCliente({ id: 0, nombre: "", atencion: "" });
+      } else {
+        const datosBackend = await respuesta.json();
+        setNotificacion({
+          mostrar: true,
+          tipo: "error",
+          mensaje: `Error: ${datosBackend.detail || "Fallo"}.`,
+        });
+      }
+    } catch (error) {
+      setNotificacion({
+        mostrar: true,
+        tipo: "error",
+        mensaje: "Error de conexión.",
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="page-sim" ref={pageRef}>
+        <datalist id="lista-servicios-react">
+          {Object.keys(catalogo).map((desc, i) => (
+            <option key={i} value={desc} />
+          ))}
+        </datalist>
+
+        <div className="header-container">
+          <div className="logo-box">
+            <img
+              src="http://127.0.0.1:8000/assets/logo.png"
+              className="logo-img"
+              alt="Logo"
+              crossOrigin="anonymous"
+            />
+          </div>
+          <div className="brand-text-box">
+            <p className="brand-name">RC&C</p>
+            <p className="brand-name">REFRIGERACIÓN, CLIMAS Y CONSTRUCCIÓN.</p>
+            <p className="brand-address">
+              Guadalupe Victoria #206-1, col. Emilio Portes Gil, Tampico.
+              <br />
+              C.P. 89316
+              <br />
+              Tels. 833 155 19 65
+            </p>
+          </div>
+        </div>
+
+        <div className="top-info-row">
+          <div>
+            <strong>CLIENTE:</strong>
+            <input
+              type="text"
+              value={cliente.nombre}
+              onChange={(e) =>
+                setCliente({ ...cliente, nombre: e.target.value })
+              }
+              maxLength="65"
+            />
+          </div>
+          <div>
+            <strong>FECHA:</strong> <span>{fechaActual}</span>
+          </div>
+        </div>
+
+        <div className="atencion-row">
+          <strong>ATENCION:</strong>
+          <input
+            type="text"
+            value={cliente.atencion}
+            onChange={(e) =>
+              setCliente({ ...cliente, atencion: e.target.value })
+            }
+            maxLength="65"
+          />
+        </div>
+
+        <div className="intro-text">
+          Atendiendo sus indicaciones presentamos cotización:
+        </div>
+
+        <table className="items-section">
+          <thead>
+            <tr>
+              <th>PARTIDA</th>
+              <th>DESCRIPCION LIBRE</th>
+              <th>UNIDAD</th>
+              <th>CANTIDAD</th>
+              <th>PRECIO U.</th>
+              <th>TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {partidas.map((p, index) => (
+              <tr key={p.id}>
+                <td>{index + 1}</td>
+                <td className="col-desc">
+                  <input
+                    type="text"
+                    className="item-input item-desc"
+                    list="lista-servicios-react"
+                    placeholder="Escribe o elige un concepto..."
+                    value={p.concepto}
+                    onChange={(e) =>
+                      actualizarPartida(p.id, "concepto", e.target.value)
+                    }
+                  />
+                </td>
+                <td>Servicio</td>
+                <td>
+                  <input
+                    type="number"
+                    className="item-input item-input-cant"
+                    min="1"
+                    value={p.cantidad}
+                    onChange={(e) =>
+                      actualizarPartida(
+                        p.id,
+                        "cantidad",
+                        parseInt(e.target.value) || 0,
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    className="item-input item-input-money"
+                    value={p.precio_unitario}
+                    onChange={(e) =>
+                      actualizarPartida(
+                        p.id,
+                        "precio_unitario",
+                        parseFloat(e.target.value) || 0,
+                      )
+                    }
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    className="item-input item-input-money"
+                    value={(p.cantidad * p.precio_unitario).toFixed(2)}
+                    disabled
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <button type="button" className="add-row-btn" onClick={agregarPartida}>
+          <PlusCircle size={14} /> Añadir Partida
+        </button>
+
+        <div className="post-table-section">
+          <div className="avisos">
+            PRECIOS UNITARIOS + 16% DE IVA
+            <br />
+            PRECIOS EN MONEDA NACIONAL
+          </div>
+          <table className="totals-box">
+            <tbody>
+              <tr>
+                <td className="label-total">SUBTOTAL</td>
+                <td>${calculos.subtotal.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td className="label-total">IVA</td>
+                <td>${calculos.iva.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td className="label-total final-total">TOTAL</td>
+                <td className="final-total">${calculos.total.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="submit-container">
+          <button className="btn-submit" onClick={enviarCotizacionFinal}>
+            <Save
+              size={18}
+              style={{ marginRight: "8px", verticalAlign: "middle" }}
+            />
+            GUARDAR COTIZACIÓN Y CREAR PDF
+          </button>
+          {notificacion.mostrar && (
+            <div id="resultadoNotificacion" className={notificacion.tipo}>
+              {notificacion.mensaje}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "fixed",
+          left: "-99999px",
+          top: 0,
+          width: "794px",
+          pointerEvents: "none",
+          opacity: 0,
+        }}
+      >
+        <div className="page-sim" ref={pdfRef}>
+          <div className="header-container">
+            <div className="logo-box">
+              <img
+                src="http://127.0.0.1:8000/assets/logo.png"
+                className="logo-img"
+                alt="Logo"
+                crossOrigin="anonymous"
+              />
+            </div>
+            <div className="brand-text-box">
+              <p className="brand-name">RC&C</p>
+              <p className="brand-name">
+                REFRIGERACIÓN, CLIMAS Y CONSTRUCCIÓN.
+              </p>
+              <p className="brand-address">
+                Guadalupe Victoria #206-1, col. Emilio Portes Gil, Tampico
+                Tamaulipas.
+                <br />
+                C.P. 89316
+                <br />
+                Tels. 833 155 19 65
+              </p>
+            </div>
+          </div>
+
+          <div className="top-info-row">
+            <div>
+              <strong>CLIENTE:</strong> <span>{cliente.nombre}</span>
+            </div>
+            <div>
+              <strong>FECHA:</strong> <span>{fechaActual}</span>
+            </div>
+          </div>
+
+          <div className="atencion-row">
+            <strong>ATENCION:</strong> <span>{cliente.atencion}</span>
+          </div>
+
+          <div className="intro-text">
+            Atendiendo sus indicaciones presentamos cotización:
+          </div>
+
+          <table className="items-section">
+            <thead>
+              <tr>
+                <th>PARTIDA</th>
+                <th>DESCRIPCION</th>
+                <th>UNIDAD</th>
+                <th>CANTIDAD</th>
+                <th>PRECIO UNITARIO</th>
+                <th>TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {partidasParaPdf.map((p, index) => (
+                <tr key={`pdf-${p.id}`}>
+                  <td>{index + 1}</td>
+                  <td className="col-desc">{p.concepto}</td>
+                  <td>Servicio</td>
+                  <td>{p.cantidad}</td>
+                  <td style={{ textAlign: "right" }}>
+                    ${p.precio_unitario.toFixed(2)}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    ${p.importe.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="post-table-section" style={{ marginBottom: "20px" }}>
+            <div className="avisos">
+              PRECIOS UNITARIOS + 16% DE IVA
+              <br />
+              PRECIOS EN MONEDA NACIONAL
+            </div>
+            <table className="totals-box">
+              <tbody>
+                <tr>
+                  <td className="label-total">SUBTOTAL</td>
+                  <td>${calculos.subtotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td className="label-total">IVA (16%)</td>
+                  <td>${calculos.iva.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td className="label-total final-total">TOTAL</td>
+                  <td className="final-total">${calculos.total.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            style={{ textAlign: "center", marginTop: "40px", fontSize: "10pt" }}
+          >
+            <p>
+              SIN OTRO PARTICULAR DE MOMENTO Y AGRADECIENDO DE ANTEMANO SU
+              ATENCION QUEDO A SUS ORDENES
+            </p>
+            <br />
+            <p>ATENTAMENTE</p>
+            <br />
+            <div
+              style={{
+                width: "40%",
+                margin: "0 auto",
+                borderTop: "1px solid #000",
+                paddingTop: "5px",
+                fontWeight: "bold",
+              }}
+            >
+              ING. SILVIA HERNÁNDEZ
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
