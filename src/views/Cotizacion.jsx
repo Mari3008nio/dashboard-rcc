@@ -55,15 +55,15 @@ export default function Cotizacion({ clientePreCargado }) {
   };
 
   const agregarPartida = () => {
-    setPartidas([
-      ...partidas,
+    setPartidas((prevPartidas) => [
+      ...prevPartidas,
       { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
     ]);
   };
 
   const actualizarPartida = (id, campo, valor) => {
-    setPartidas(
-      partidas.map((p) => {
+    setPartidas((prevPartidas) =>
+      prevPartidas.map((p) => {
         if (p.id === id) {
           let valorProcesado = valor;
 
