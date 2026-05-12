@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Save } from "lucide-react";
+import html2pdf from "html2pdf.js";
 
 export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
@@ -101,6 +102,30 @@ export default function Cotizacion({ clientePreCargado }) {
     [partidas],
   );
 
+  const generarPdfBlob = async () => {
+    if (!pageRef.current) return null;
+
+    const opciones = {
+      margin: [0, 0, 0, 0],
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      },
+      pagebreak: { mode: ["css", "legacy"] },
+    };
+
+    const worker = html2pdf().set(opciones).from(pageRef.current);
+    const blob = await worker.outputPdf("blob");
+    return blob;
+  };
+
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
@@ -143,10 +168,42 @@ export default function Cotizacion({ clientePreCargado }) {
 
       if (respuesta.ok) {
         const data = await respuesta.json();
-        
-        // Descargar el PDF generado en el servidor
-        const pdfUrl = `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
-        const enlace = document.createElement('a');
+        const pdfBlob = await generarPdfBlob();
+
+        if (!pdfBlob) {
+          setNotificacion({
+            mostrar: true,
+            tipo: "error",
+            mensaje: "No se pudo generar el PDF en el navegador.",
+          });
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("pdf", pdfBlob, `cotizacion_${data?.folio}.pdf`);
+
+        const uploadRespuesta = await fetchSeguro(
+          `https://astonishing-determination-production.up.railway.app/api/v1/cotizaciones/subir-pdf/${data?.folio}`,
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
+
+        if (!uploadRespuesta.ok) {
+          const datosError = await uploadRespuesta.json();
+          setNotificacion({
+            mostrar: true,
+            tipo: "error",
+            mensaje: `Error al guardar el PDF en el servidor: ${datosError.detail || "Fallo"}`,
+          });
+          return;
+        }
+
+        const uploadData = await uploadRespuesta.json();
+        const pdfUrl = uploadData.url || `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
+
+        const enlace = document.createElement("a");
         enlace.href = pdfUrl;
         enlace.download = `cotizacion_${data?.folio}.pdf`;
         document.body.appendChild(enlace);
