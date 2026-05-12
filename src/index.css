@@ -317,6 +317,7 @@ body {
   margin-bottom: 5px;
   border: 2px solid #000;
   color: #000;
+  table-layout: fixed;
 }
 .items-section th,
 .items-section td {
@@ -324,14 +325,39 @@ body {
   padding: 6px;
   text-align: center;
   font-size: 10pt;
+  white-space: normal;
+  word-break: break-word;
 }
 .items-section th {
   background-color: #d9d9d9;
   font-weight: bold;
 }
+.items-section th:nth-child(1),
+.items-section td:nth-child(1) {
+  width: 8%;
+}
+.items-section th:nth-child(2),
+.items-section td:nth-child(2) {
+  width: 45%;
+}
+.items-section th:nth-child(3),
+.items-section td:nth-child(3) {
+  width: 12%;
+}
+.items-section th:nth-child(4),
+.items-section td:nth-child(4) {
+  width: 10%;
+}
+.items-section th:nth-child(5),
+.items-section td:nth-child(5) {
+  width: 12%;
+}
+.items-section th:nth-child(6),
+.items-section td:nth-child(6) {
+  width: 13%;
+}
 .col-desc {
   text-align: left;
-  width: 40%;
 }
 .item-input {
   width: 100%;
@@ -339,9 +365,10 @@ body {
   outline: none;
   background: transparent;
   font-size: 10pt;
-  text-align: center;
+  text-align: left;
   padding: 2px;
   box-sizing: border-box;
+  white-space: normal;
 }
 .item-input:focus {
   border-bottom: 1px dashed #3498db;

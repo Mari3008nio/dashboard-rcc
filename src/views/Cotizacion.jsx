@@ -54,6 +54,12 @@ export default function Cotizacion({ clientePreCargado }) {
     }
   };
 
+  const parseNumero = (valor) => {
+    const raw = String(valor).replace(",", ".").trim();
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const agregarPartida = () => {
     setPartidas([
       ...partidas,
@@ -68,7 +74,7 @@ export default function Cotizacion({ clientePreCargado }) {
           const nuevaPartida = {
             ...p,
             [campo]: campo === "precio_unitario" || campo === "cantidad"
-              ? Number(valor) || 0
+              ? parseNumero(valor)
               : valor,
           };
           // Autocompletar precio si existe en catálogo y se está editando el concepto
@@ -362,13 +368,10 @@ export default function Cotizacion({ clientePreCargado }) {
                     type="number"
                     className="item-input item-input-cant"
                     min="1"
+                    step="1"
                     value={p.cantidad}
                     onChange={(e) =>
-                      actualizarPartida(
-                        p.id,
-                        "cantidad",
-                        parseInt(e.target.value) || 0,
-                      )
+                      actualizarPartida(p.id, "cantidad", e.target.value)
                     }
                   />
                 </td>
@@ -377,12 +380,10 @@ export default function Cotizacion({ clientePreCargado }) {
                     type="number"
                     className="item-input item-input-money"
                     value={p.precio_unitario}
+                    min="0"
+                    step="0.01"
                     onChange={(e) =>
-                      actualizarPartida(
-                        p.id,
-                        "precio_unitario",
-                        parseFloat(e.target.value) || 0,
-                      )
+                      actualizarPartida(p.id, "precio_unitario", e.target.value)
                     }
                   />
                 </td>
