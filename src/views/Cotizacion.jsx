@@ -122,6 +122,17 @@ export default function Cotizacion({ clientePreCargado }) {
     [partidas],
   );
 
+  useEffect(() => {
+    console.log("Cotizacion: totales recalculados", {
+      cliente,
+      partidas,
+      partidasParaPdf,
+      totalParcial,
+      iva,
+      total,
+    });
+  }, [cliente, partidas, partidasParaPdf, totalParcial, iva, total]);
+
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
