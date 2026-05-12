@@ -28,7 +28,7 @@ export default function App() {
     formData.append("password", password);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/v1/login", {
+      const response = await fetch("https://astonishing-determination-production.up.railway.app/api/v1/login", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData,
@@ -63,7 +63,7 @@ export default function App() {
     return (
       <div id="pantalla-login">
         <div className="login-box">
-          <img src="http://127.0.0.1:8000/assets/logo.png" alt="Logo RC&C" />
+          <img src="https://astonishing-determination-production.up.railway.app/assets/logo.png" alt="Logo RC&C" />
           <h2 style={{ marginTop: 0, color: "#2c3e50" }}>Acceso al Sistema</h2>
           <input
             type="email"

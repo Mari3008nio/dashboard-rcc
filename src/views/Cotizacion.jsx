@@ -40,7 +40,7 @@ export default function Cotizacion({ clientePreCargado }) {
   const cargarCatalogo = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "http://127.0.0.1:8000/api/v1/servicios/listar",
+        "https://astonishing-determination-production.up.railway.app/api/v1/servicios/listar",
       );
       const datos = await respuesta.json();
       const catObj = {};
@@ -152,7 +152,7 @@ export default function Cotizacion({ clientePreCargado }) {
 
     try {
       const respuesta = await fetchSeguro(
-        "http://127.0.0.1:8000/api/v1/cotizaciones/generar",
+        "https://astonishing-determination-production.up.railway.app/api/v1/cotizaciones/generar",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -210,7 +210,7 @@ export default function Cotizacion({ clientePreCargado }) {
         <div className="header-container">
           <div className="logo-box">
             <img
-              src="http://127.0.0.1:8000/assets/logo.png"
+              src="https://astonishing-determination-production.up.railway.app/assets/logo.png"
               className="logo-img"
               alt="Logo"
               crossOrigin="anonymous"
@@ -390,7 +390,7 @@ export default function Cotizacion({ clientePreCargado }) {
           <div className="header-container">
             <div className="logo-box">
               <img
-                src="http://127.0.0.1:8000/assets/logo.png"
+                src="https://astonishing-determination-production.up.railway.app/assets/logo.png"
                 className="logo-img"
                 alt="Logo"
                 crossOrigin="anonymous"

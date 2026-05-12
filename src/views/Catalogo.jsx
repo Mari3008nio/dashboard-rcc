@@ -18,7 +18,7 @@ export default function Catalogo() {
   const cargarCatalogo = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "http://127.0.0.1:8000/api/v1/servicios/listar",
+        "https://astonishing-determination-production.up.railway.app/api/v1/servicios/listar",
       );
       const datos = await respuesta.json();
       setServicios(datos.servicios || []);
@@ -46,7 +46,7 @@ export default function Catalogo() {
       return alert("Concepto o precio inválido.");
     }
 
-    let url = "http://127.0.0.1:8000/api/v1/servicios/guardar";
+    let url = "https://astonishing-determination-production.up.railway.app/api/v1/servicios/guardar";
     let method = "POST";
     let peticion = {
       concepto: formDatos.concepto,
@@ -54,7 +54,7 @@ export default function Catalogo() {
     };
 
     if (formDatos.id) {
-      url = "http://127.0.0.1:8000/api/v1/servicios/actualizar";
+      url = "https://astonishing-determination-production.up.railway.app/api/v1/servicios/actualizar";
       method = "PUT";
       peticion.id_servicio = formDatos.id;
     }
@@ -78,7 +78,7 @@ export default function Catalogo() {
     if (window.confirm("¿Seguro que quieres borrar este servicio?")) {
       try {
         await fetchSeguro(
-          `http://127.0.0.1:8000/api/v1/servicios/borrar/${id}`,
+          `https://astonishing-determination-production.up.railway.app/api/v1/servicios/borrar/${id}`,
           { method: "DELETE" },
         );
         cargarCatalogo();

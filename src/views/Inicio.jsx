@@ -13,7 +13,7 @@ export default function Inicio() {
   const cargarHistorial = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "http://127.0.0.1:8000/api/v1/cotizaciones/historial",
+        "https://astonishing-determination-production.up.railway.app/api/v1/cotizaciones/historial",
       );
       const datos = await respuesta.json();
       setHistorial(datos.historial || []);

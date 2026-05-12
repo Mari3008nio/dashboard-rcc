@@ -21,7 +21,7 @@ export default function Clientes({ onCotizar }) {
   const cargarDirectorio = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "http://127.0.0.1:8000/api/v1/clientes/listar",
+        "https://astonishing-determination-production.up.railway.app/api/v1/clientes/listar",
       );
       const datos = await respuesta.json();
       setClientes(datos.clientes || []);
@@ -64,12 +64,12 @@ export default function Clientes({ onCotizar }) {
       return alert("Faltan datos obligatorios.");
     }
 
-    let url = "http://127.0.0.1:8000/api/v1/clientes/guardar";
+    let url = "https://astonishing-determination-production.up.railway.app/api/v1/clientes/guardar";
     let method = "POST";
     let peticion = { ...formDatos, rfc: formDatos.rfc.toUpperCase() };
 
     if (formDatos.id) {
-      url = "http://127.0.0.1:8000/api/v1/clientes/actualizar";
+      url = "https://astonishing-determination-production.up.railway.app/api/v1/clientes/actualizar";
       method = "PUT";
       peticion.id_cliente = formDatos.id;
     }
@@ -93,7 +93,7 @@ export default function Clientes({ onCotizar }) {
     if (window.confirm("¿Seguro que quieres borrar este cliente?")) {
       try {
         await fetchSeguro(
-          `http://127.0.0.1:8000/api/v1/clientes/borrar/${id}`,
+          `https://astonishing-determination-production.up.railway.app/api/v1/clientes/borrar/${id}`,
           { method: "DELETE" },
         );
         cargarDirectorio();
