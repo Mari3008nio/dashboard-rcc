@@ -7,7 +7,7 @@ export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
   const [partidas, setPartidas] = useState([
-    { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+    { id: Date.now() + Math.random() * 10000, concepto: "", cantidad: 1, precio_unitario: 0 },
   ]);
   const [catalogo, setCatalogo] = useState({});
   const [notificacion, setNotificacion] = useState({
@@ -25,13 +25,9 @@ export default function Cotizacion({ clientePreCargado }) {
   useEffect(() => {
     if (clientePreCargado) {
       setCliente({
-        id: clientePreCargado.id,
-        nombre:
-          clientePreCargado.nombre !== "null" ? clientePreCargado.nombre : "",
-        atencion:
-          clientePreCargado.atencion !== "null"
-            ? clientePreCargado.atencion
-            : "",
+        id: clientePreCargado.id || 0,
+        nombre: clientePreCargado.nombre && clientePreCargado.nombre !== "null" ? clientePreCargado.nombre : "",
+        atencion: clientePreCargado.atencion && clientePreCargado.atencion !== "null" ? clientePreCargado.atencion : "",
       });
     }
   }, [clientePreCargado]);
@@ -43,41 +39,48 @@ export default function Cotizacion({ clientePreCargado }) {
       );
       const datos = await respuesta.json();
       const catObj = {};
-      if (datos.servicios) {
+      if (datos.servicios && Array.isArray(datos.servicios)) {
         datos.servicios.forEach((serv) => {
-          catObj[serv.descripcion] = parseFloat(serv.precio);
+          if (serv.descripcion && serv.precio) {
+            catObj[serv.descripcion] = parseFloat(serv.precio);
+          }
         });
       }
       setCatalogo(catObj);
+      console.log("Catálogo cargado:", Object.keys(catObj).length, "servicios");
     } catch (error) {
-      console.error(error);
+      console.error("Error cargando catálogo:", error);
     }
   };
 
   const agregarPartida = () => {
+    const nuevoId = Date.now() + Math.random() * 10000;
     setPartidas((prevPartidas) => [
       ...prevPartidas,
-      { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+      { id: nuevoId, concepto: "", cantidad: 1, precio_unitario: 0 },
     ]);
+    console.log("Nueva partida agregada, total:", partidas.length + 1);
   };
 
   const actualizarPartida = (id, campo, valor) => {
-    console.log("Cotizacion: actualizarPartida", { id, campo, valor });
     setPartidas((prevPartidas) =>
       prevPartidas.map((p) => {
         if (p.id === id) {
           let valorProcesado = valor;
-
+          
           if (campo === "cantidad" || campo === "precio_unitario") {
-            const texto = String(valor).replace(",", ".");
-            valorProcesado = texto === "" ? 0 : Number(texto);
+            const texto = String(valor || "0").replace(",", ".");
+            valorProcesado = texto === "" ? 0 : parseFloat(texto);
+            if (isNaN(valorProcesado)) valorProcesado = 0;
           }
-
+          
           const nuevaPartida = { ...p, [campo]: valorProcesado };
-          // Autocompletar precio si existe en catálogo y se está editando el concepto
-          if (campo === "concepto" && catalogo[valor] !== undefined) {
+          
+          // Auto-completar precio si existe en catálogo y se está editando el concepto
+          if (campo === "concepto" && valor && catalogo[valor] !== undefined) {
             nuevaPartida.precio_unitario = catalogo[valor];
           }
+          
           return nuevaPartida;
         }
         return p;
@@ -85,80 +88,82 @@ export default function Cotizacion({ clientePreCargado }) {
     );
   };
 
-  useEffect(() => {
-    console.log("Cotizacion: partidas actualizadas", partidas);
-  }, [partidas]);
-
+  // ✅ CORREGIDO: useMemo con validación robusta
   const { totalParcial, iva, total } = useMemo(() => {
-    const parcial = partidas.reduce((acumulador, item) => {
-      const cantidad = Number(String(item.cantidad).replace(",", ".")) || 0;
-      const precio = Number(String(item.precio_unitario).replace(",", ".")) || 0;
-      return acumulador + cantidad * precio;
-    }, 0);
-
+    let parcial = 0;
+    
+    for (const item of partidas) {
+      // Validación segura de cantidad
+      let cantidad = 0;
+      if (item.cantidad !== undefined && item.cantidad !== null && item.cantidad !== "") {
+        const cantStr = String(item.cantidad).replace(",", ".");
+        cantidad = parseFloat(cantStr);
+        if (isNaN(cantidad)) cantidad = 0;
+      }
+      
+      // Validación segura de precio
+      let precio = 0;
+      if (item.precio_unitario !== undefined && item.precio_unitario !== null && item.precio_unitario !== "") {
+        const precioStr = String(item.precio_unitario).replace(",", ".");
+        precio = parseFloat(precioStr);
+        if (isNaN(precio)) precio = 0;
+      }
+      
+      parcial += cantidad * precio;
+    }
+    
     const calcIva = parcial * 0.16;
     const calcTotal = parcial + calcIva;
-
+    
     return { totalParcial: parcial, iva: calcIva, total: calcTotal };
   }, [partidas]);
 
-  const partidasParaPdf = useMemo(
-    () =>
-      partidas
-        .filter(
-          (p) =>
-            p.concepto.trim() !== "" &&
-            Number(p.cantidad) > 0 &&
-            !isNaN(Number(p.precio_unitario)),
-        )
-        .map((p) => ({
+  const partidasParaPdf = useMemo(() => {
+    return partidas
+      .filter((p) => {
+        const tieneConcepto = p.concepto && p.concepto.trim() !== "";
+        const cantidadValida = p.cantidad > 0 && !isNaN(p.cantidad);
+        const precioValido = p.precio_unitario > 0 && !isNaN(p.precio_unitario);
+        return tieneConcepto && cantidadValida && precioValido;
+      })
+      .map((p) => {
+        const cantidad = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
+        const precio = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
+        return {
           ...p,
-          cantidad: Number(String(p.cantidad).replace(",", ".")) || 0,
-          precio_unitario: Number(String(p.precio_unitario).replace(",", ".")) || 0,
-          importe:
-            (Number(String(p.cantidad).replace(",", ".")) || 0) *
-            (Number(String(p.precio_unitario).replace(",", ".")) || 0),
-        })),
-    [partidas],
-  );
-
-  useEffect(() => {
-    console.log("Cotizacion: totales recalculados", {
-      cliente,
-      partidas,
-      partidasParaPdf,
-      totalParcial,
-      iva,
-      total,
-    });
-  }, [cliente, partidas, partidasParaPdf, totalParcial, iva, total]);
+          cantidad: cantidad,
+          precio_unitario: precio,
+          importe: cantidad * precio,
+        };
+      });
+  }, [partidas]);
 
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    // --- TRUCO NIVEL DIOS PARA EL PDF ---
-    // 1. Convertimos el input de texto en un <div> temporal para que el PDF baje de renglón
+    // --- TRUCO PARA EL PDF ---
     const descInputs = pageRef.current.querySelectorAll("input.item-desc");
+    const inputsModificados = [];
+    
     descInputs.forEach((input) => {
       const div = document.createElement("div");
-      div.innerText = input.value;
+      div.innerText = input.value || "";
       div.className = "temp-pdf-div";
       div.style.whiteSpace = "pre-wrap";
       div.style.wordBreak = "break-word";
       div.style.textAlign = "left";
       div.style.fontSize = "10pt";
       input.parentNode.insertBefore(div, input);
-      input.style.display = "none"; // Ocultamos el input original
+      input.style.display = "none";
+      inputsModificados.push(input);
     });
 
-    // 2. Fijamos el valor de los números para que no salgan en blanco
     const numInputs = pageRef.current.querySelectorAll(
       "input[type='number'], input[type='text']:not(.item-desc)",
     );
     numInputs.forEach((input) => {
-      input.setAttribute("value", input.value);
+      input.setAttribute("value", input.value || "");
     });
-    // ------------------------------------
 
     const opciones = {
       margin: [0, 0, 0, 0],
@@ -180,20 +185,14 @@ export default function Cotizacion({ clientePreCargado }) {
       const worker = html2pdf().set(opciones).from(pageRef.current);
       return await worker.outputPdf("blob");
     } catch (error) {
-      console.error("Error generando PDF con html2pdf outputPdf:", error);
-      try {
-        const worker = html2pdf().set(opciones).from(pageRef.current);
-        return await worker.output("blob");
-      } catch (fallbackError) {
-        console.error("Fallo el fallback de html2pdf:", fallbackError);
-        return null;
-      }
+      console.error("Error generando PDF:", error);
+      return null;
     } finally {
-      // --- REVERTIMOS EL TRUCO PARA QUE LA PANTALLA NO SE ROMPA ---
-      descInputs.forEach((input) => {
-        input.style.display = ""; // Volvemos a mostrar el input
+      // Revertir cambios
+      inputsModificados.forEach((input) => {
+        input.style.display = "";
         const div = input.parentNode.querySelector(".temp-pdf-div");
-        if (div) div.remove(); // Borramos el texto temporal
+        if (div) div.remove();
       });
     }
   };
@@ -201,24 +200,33 @@ export default function Cotizacion({ clientePreCargado }) {
   const enviarCotizacionFinal = async () => {
     setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
 
-    const serviciosParaBackend = partidas
-      .filter(
-        (p) =>
-          p.concepto.trim() !== "" &&
-          p.cantidad > 0 &&
-          !isNaN(p.precio_unitario),
-      )
-      .map((p) => ({
-        concepto: p.concepto.trim(),
-        precio_unitario: parseFloat(String(p.precio_unitario).replace(",", ".")) || 0,
-        cantidad: parseFloat(String(p.cantidad).replace(",", ".")) || 0,
-      }));
+    // Validar y preparar servicios
+    const serviciosParaBackend = [];
+    
+    for (const p of partidas) {
+      const concepto = p.concepto ? p.concepto.trim() : "";
+      const cantidad = parseFloat(String(p.cantidad || 0).replace(",", "."));
+      const precio = parseFloat(String(p.precio_unitario || 0).replace(",", "."));
+      
+      if (concepto !== "" && cantidad > 0 && !isNaN(precio) && precio > 0) {
+        serviciosParaBackend.push({
+          concepto: concepto,
+          precio_unitario: precio,
+          cantidad: cantidad,
+        });
+      }
+    }
 
     if (serviciosParaBackend.length === 0) {
-      alert(
-        "Debes agregar al menos una partida con texto y precio a la tabla.",
-      );
+      alert("Debes agregar al menos una partida con concepto, cantidad y precio válidos.");
       return;
+    }
+
+    // Validar cliente
+    if (!cliente.nombre || cliente.nombre.trim() === "") {
+      if (!confirm("El cliente no tiene nombre. ¿Deseas continuar de todas formas?")) {
+        return;
+      }
     }
 
     try {
@@ -229,9 +237,9 @@ export default function Cotizacion({ clientePreCargado }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             cliente: {
-              id_cliente: cliente.id,
-              nombre: cliente.nombre,
-              atencion: cliente.atencion,
+              id_cliente: cliente.id || 0,
+              nombre: cliente.nombre || "Cliente ocasional",
+              atencion: cliente.atencion || "",
             },
             servicios: serviciosParaBackend,
           }),
@@ -263,33 +271,16 @@ export default function Cotizacion({ clientePreCargado }) {
         );
 
         if (!uploadRespuesta.ok) {
-          const textoRespuesta = await uploadRespuesta.text();
-          let datosError = null;
-          try {
-            datosError = JSON.parse(textoRespuesta);
-          } catch {
-            datosError = textoRespuesta;
-          }
-
-          const detalleError = datosError
-            ? typeof datosError.detail === "object"
-              ? JSON.stringify(datosError.detail)
-              : datosError.detail || datosError.mensaje || datosError
-            : uploadRespuesta.statusText;
-
           setNotificacion({
             mostrar: true,
             tipo: "error",
-            mensaje: `Error al guardar el PDF en el servidor: ${detalleError}`,
+            mensaje: "Error al guardar el PDF en el servidor.",
           });
           return;
         }
 
-        const uploadData = await uploadRespuesta.json();
-        const pdfUrl =
-          uploadData.url ||
-          `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
-
+        const pdfUrl = `https://astonishing-determination-production.up.railway.app/pdfs/cotizacion_${data?.folio}.pdf`;
+        
         const enlace = document.createElement("a");
         enlace.href = pdfUrl;
         enlace.download = `cotizacion_${data?.folio}.pdf`;
@@ -302,24 +293,32 @@ export default function Cotizacion({ clientePreCargado }) {
           tipo: "exito",
           mensaje: "¡LISTO! Cotización guardada y PDF descargado.",
         });
-        // Limpiar form
+        
+        // Limpiar formulario
         setPartidas([
-          { id: Date.now(), concepto: "", cantidad: 1, precio_unitario: 0 },
+          { id: Date.now() + Math.random() * 10000, concepto: "", cantidad: 1, precio_unitario: 0 },
         ]);
         setCliente({ id: 0, nombre: "", atencion: "" });
+        
+        // Ocultar notificación después de 5 segundos
+        setTimeout(() => {
+          setNotificacion({ mostrar: false, tipo: "", mensaje: "" });
+        }, 5000);
+        
       } else {
         const datosBackend = await respuesta.json();
         setNotificacion({
           mostrar: true,
           tipo: "error",
-          mensaje: `Error: ${datosBackend.detail || "Fallo"}.`,
+          mensaje: `Error: ${datosBackend.detail || "Fallo en el servidor"}.`,
         });
       }
     } catch (error) {
+      console.error("Error en enviarCotizacionFinal:", error);
       setNotificacion({
         mostrar: true,
         tipo: "error",
-        mensaje: "Error de conexión.",
+        mensaje: "Error de conexión con el servidor.",
       });
     }
   };
@@ -343,7 +342,7 @@ export default function Cotizacion({ clientePreCargado }) {
             />
           </div>
           <div className="brand-text-box">
-            <p className="brand-name">RC&C</p>
+            <p className="brand-name">RC&amp;C</p>
             <p className="brand-name">REFRIGERACIÓN, CLIMAS Y CONSTRUCCIÓN.</p>
             <p className="brand-address">
               Guadalupe Victoria #206-1, col. Emilio Portes Gil, Tampico.
@@ -360,11 +359,12 @@ export default function Cotizacion({ clientePreCargado }) {
             <strong>CLIENTE:</strong>
             <input
               type="text"
-              value={cliente.nombre}
+              value={cliente.nombre || ""}
               onChange={(e) =>
                 setCliente({ ...cliente, nombre: e.target.value })
               }
               maxLength="65"
+              placeholder="Nombre del cliente"
             />
           </div>
           <div>
@@ -376,11 +376,12 @@ export default function Cotizacion({ clientePreCargado }) {
           <strong>ATENCION:</strong>
           <input
             type="text"
-            value={cliente.atencion}
+            value={cliente.atencion || ""}
             onChange={(e) =>
               setCliente({ ...cliente, atencion: e.target.value })
             }
             maxLength="65"
+            placeholder="Persona de contacto"
           />
         </div>
 
@@ -400,59 +401,63 @@ export default function Cotizacion({ clientePreCargado }) {
             </tr>
           </thead>
           <tbody>
-            {partidas.map((p, index) => (
-              <tr key={p.id}>
-                <td>{index + 1}</td>
-                <td className="col-desc">
-                  <input
-                    type="text"
-                    className="item-input item-desc"
-                    list="lista-servicios-react"
-                    placeholder="Escribe o elige un concepto..."
-                    value={p.concepto}
-                    onChange={(e) =>
-                      actualizarPartida(p.id, "concepto", e.target.value)
-                    }
-                  />
-                </td>
-                <td>Servicio</td>
-                <td>
-                  <input
-                    type="number"
-                    className="item-input item-input-cant"
-                    min="1"
-                    step="1"
-                    value={p.cantidad}
-                    onChange={(e) =>
-                      actualizarPartida(p.id, "cantidad", e.target.value)
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    className="item-input item-input-money"
-                    value={p.precio_unitario}
-                    min="0"
-                    step="0.01"
-                    onChange={(e) =>
-                      actualizarPartida(p.id, "precio_unitario", e.target.value)
-                    }
-                  />
-                </td>
-                <td>
-                  <input
-                    type="text"
-                    className="item-input item-input-money"
-                    value={(
-                      (parseFloat(String(p.cantidad).replace(",", ".")) || 0) *
-                      (parseFloat(String(p.precio_unitario).replace(",", ".")) || 0)
-                    ).toFixed(2)}
-                    disabled
-                  />
-                </td>
-              </tr>
-            ))}
+            {partidas.map((p, index) => {
+              const cantidadNum = parseFloat(String(p.cantidad || 0).replace(",", ".")) || 0;
+              const precioNum = parseFloat(String(p.precio_unitario || 0).replace(",", ".")) || 0;
+              const totalLinea = cantidadNum * precioNum;
+              
+              return (
+                <tr key={p.id}>
+                  <td style={{ textAlign: "center" }}>{index + 1}</td>
+                  <td className="col-desc">
+                    <input
+                      type="text"
+                      className="item-input item-desc"
+                      list="lista-servicios-react"
+                      placeholder="Escribe o elige un concepto..."
+                      value={p.concepto || ""}
+                      onChange={(e) =>
+                        actualizarPartida(p.id, "concepto", e.target.value)
+                      }
+                    />
+                  </td>
+                  <td style={{ textAlign: "center" }}>Servicio</td>
+                  <td>
+                    <input
+                      type="number"
+                      className="item-input item-input-cant"
+                      min="1"
+                      step="1"
+                      value={p.cantidad ?? 1}
+                      onChange={(e) =>
+                        actualizarPartida(p.id, "cantidad", e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      className="item-input item-input-money"
+                      value={p.precio_unitario ?? 0}
+                      min="0"
+                      step="0.01"
+                      onChange={(e) =>
+                        actualizarPartida(p.id, "precio_unitario", e.target.value)
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      className="item-input item-input-money"
+                      value={totalLinea.toFixed(2)}
+                      disabled
+                      readOnly
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
