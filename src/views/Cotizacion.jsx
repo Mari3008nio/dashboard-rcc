@@ -327,16 +327,22 @@ export default function Cotizacion({ clientePreCargado }) {
           <table className="totals-box">
             <tbody>
               <tr>
-                <td className="label-total">SUBTOTAL</td>
-                <td>${calculos.subtotal.toFixed(2)}</td>
+                <td className="label-total">SUBTOTAL:</td>
+                <td style={{ fontWeight: "bold", textAlign: "right" }}>
+                  ${calculos.subtotal.toFixed(2)}
+                </td>
               </tr>
               <tr>
-                <td className="label-total">IVA</td>
-                <td>${calculos.iva.toFixed(2)}</td>
+                <td className="label-total">IVA (16%):</td>
+                <td style={{ fontWeight: "bold", textAlign: "right" }}>
+                  ${calculos.iva.toFixed(2)}
+                </td>
               </tr>
               <tr>
-                <td className="label-total final-total">TOTAL</td>
-                <td className="final-total">${calculos.total.toFixed(2)}</td>
+                <td className="label-total final-total">TOTAL:</td>
+                <td className="final-total" style={{ fontWeight: "bold", textAlign: "right" }}>
+                  ${calculos.total.toFixed(2)}
+                </td>
               </tr>
             </tbody>
           </table>
