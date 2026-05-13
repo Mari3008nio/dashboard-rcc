@@ -22,6 +22,7 @@ export default function Catalogo() {
       );
       const datos = await respuesta.json();
       setServicios(datos.servicios || []);
+      console.log("📋 Catálogo cargado:", datos.servicios);
     } catch (error) {
       console.error(error);
     }
@@ -29,10 +30,11 @@ export default function Catalogo() {
 
   const abrirFormulario = (serv = null) => {
     if (serv) {
+      console.log("✏️ Editar servicio:", serv);
       setFormDatos({
         id: serv.id,
         concepto: serv.descripcion,
-        precio: serv.precio,   // ✅ se asigna correctamente el precio
+        precio: serv.precio,   // valor numérico
       });
     } else {
       setFormDatos({ id: null, concepto: "", precio: "" });
@@ -41,17 +43,25 @@ export default function Catalogo() {
   };
 
   const guardarServicio = async () => {
-    // ✅ conversión explícita a número
-    const precioParsed = parseFloat(formDatos.precio);
-    if (!formDatos.concepto || isNaN(precioParsed)) {
-      return alert("Concepto o precio inválido.");
+    // Convertir a número de forma segura
+    let precioNum = parseFloat(String(formDatos.precio).replace(",", "."));
+    if (isNaN(precioNum)) precioNum = 0;
+    
+    console.log("💾 Guardando servicio:", {
+      id: formDatos.id,
+      concepto: formDatos.concepto,
+      precio_unitario: precioNum,
+    });
+
+    if (!formDatos.concepto || precioNum <= 0) {
+      return alert("Concepto y precio válido son requeridos.");
     }
 
     let url = "https://astonishing-determination-production.up.railway.app/api/v1/servicios/guardar";
     let method = "POST";
     let peticion = {
       concepto: formDatos.concepto,
-      precio_unitario: precioParsed,
+      precio_unitario: precioNum,
     };
 
     if (formDatos.id) {
@@ -68,15 +78,18 @@ export default function Catalogo() {
       });
 
       if (respuesta.ok) {
+        const data = await respuesta.json();
+        console.log("✅ Respuesta OK:", data);
         setMostrarForm(false);
-        cargarCatalogo();   // ✅ recarga la lista actualizada
+        await cargarCatalogo(); // recarga la tabla
         alert("Servicio guardado correctamente");
       } else {
         const errorData = await respuesta.json();
+        console.error("❌ Error del servidor:", errorData);
         alert("Error: " + (errorData.detail || "No se pudo guardar"));
       }
     } catch (error) {
-      console.error(error);
+      console.error("❌ Error de red:", error);
       alert("Error de conexión al guardar el servicio.");
     }
   };
@@ -139,12 +152,12 @@ export default function Catalogo() {
               <label>Precio Unitario:</label>
               <input
                 type="number"
+                step="0.01"
                 value={formDatos.precio}
                 onChange={(e) =>
                   setFormDatos({ ...formDatos, precio: e.target.value })
                 }
                 min="0"
-                step="0.01"
               />
             </div>
           </div>
@@ -187,7 +200,7 @@ export default function Catalogo() {
               <td>
                 <strong>{serv.descripcion}</strong>
               </td>
-              <td>${parseFloat(serv.precio).toFixed(2)}</td>
+              <td>${Number(serv.precio).toFixed(2)}</td>
               <td>
                 <button
                   className="btn-edit"
