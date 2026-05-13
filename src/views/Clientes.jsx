@@ -89,19 +89,24 @@ export default function Clientes({ onCotizar }) {
     }
   };
 
-  const borrarCliente = async (id) => {
-    if (window.confirm("¿Seguro que quieres borrar este cliente?")) {
-      try {
-        await fetchSeguro(
-          `https://astonishing-determination-production.up.railway.app/api/v1/clientes/borrar/${id}`,
-          { method: "DELETE" },
-        );
-        cargarDirectorio();
-      } catch (error) {
-        console.error(error);
-      }
+const borrarCliente = async (id) => {
+  if (!window.confirm("¿Seguro que quieres borrar este cliente?")) return;
+  try {
+    const respuesta = await fetchSeguro(
+      `https://astonishing-determination-production.up.railway.app/api/v1/clientes/borrar/${id}`,
+      { method: "DELETE" },
+    );
+    if (respuesta.ok) {
+      cargarDirectorio();
+    } else {
+      const errorData = await respuesta.json();
+      alert(errorData.detail || "No se pudo borrar el cliente.");
     }
-  };
+  } catch (error) {
+    console.error(error);
+    alert("Error de conexión al intentar borrar.");
+  }
+};
 
   return (
     <>
