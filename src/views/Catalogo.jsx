@@ -32,7 +32,7 @@ export default function Catalogo() {
       setFormDatos({
         id: serv.id,
         concepto: serv.descripcion,
-        precio: serv.precio,
+        precio: serv.precio,   // ✅ se asigna correctamente el precio
       });
     } else {
       setFormDatos({ id: null, concepto: "", precio: "" });
@@ -41,6 +41,7 @@ export default function Catalogo() {
   };
 
   const guardarServicio = async () => {
+    // ✅ conversión explícita a número
     const precioParsed = parseFloat(formDatos.precio);
     if (!formDatos.concepto || isNaN(precioParsed)) {
       return alert("Concepto o precio inválido.");
@@ -65,12 +66,18 @@ export default function Catalogo() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(peticion),
       });
+
       if (respuesta.ok) {
         setMostrarForm(false);
-        cargarCatalogo();
+        cargarCatalogo();   // ✅ recarga la lista actualizada
+        alert("Servicio guardado correctamente");
+      } else {
+        const errorData = await respuesta.json();
+        alert("Error: " + (errorData.detail || "No se pudo guardar"));
       }
     } catch (error) {
       console.error(error);
+      alert("Error de conexión al guardar el servicio.");
     }
   };
 
