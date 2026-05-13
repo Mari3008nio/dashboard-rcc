@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Save, Trash2 } from "lucide-react";
 import html2pdf from "html2pdf.js";
@@ -7,8 +8,33 @@ import { getApiUrl } from "../config";
 const generarId = () =>
   Date.now().toString(36) + Math.random().toString(36).substring(2);
 
+// Componente que renderiza <input> en modo edición y <span> en modo impresión.
+// Esto evita manipular el DOM manualmente y pelear con React.
+const CampoImprimible = ({ imprimiendo, value, printStyle, ...props }) => {
+  if (imprimiendo) {
+    return (
+      <span
+        style={{
+          display: "block",
+          color: "#000",
+          background: "transparent",
+          border: "none",
+          fontFamily: "inherit",
+          lineHeight: "1.6",
+          boxSizing: "border-box",
+          ...printStyle,
+        }}
+      >
+        {value ?? ""}
+      </span>
+    );
+  }
+  return <input value={value} {...props} />;
+};
+
 export default function Cotizacion({ clientePreCargado }) {
   const pageRef = useRef(null);
+  const [imprimiendo, setImprimiendo] = useState(false);
   const [cliente, setCliente] = useState({ id: 0, nombre: "", atencion: "" });
 
   const [partidas, setPartidas] = useState([
@@ -104,56 +130,11 @@ export default function Cotizacion({ clientePreCargado }) {
   const generarPdfBlob = async () => {
     if (!pageRef.current) return null;
 
-    // ─── PASO 1: Reemplazar inputs en el DOM real ───────────────────────────
-    // html2canvas calcula el layout ANTES de onclone, así que hay que modificar
-    // el DOM verdadero. Guardamos los inputs para restaurarlos después.
-    const reemplazos = [];
-    const inputs = Array.from(pageRef.current.querySelectorAll("input"));
+    // flushSync fuerza a React a re-renderizar SINCRONAMENTE con spans en lugar
+    // de inputs antes de que html2canvas tome la captura. Sin esto, React puede
+    // re-renderizar en medio de la captura y pisar los valores.
+    flushSync(() => setImprimiendo(true));
 
-    inputs.forEach((input) => {
-      const computed = window.getComputedStyle(input);
-      const span = document.createElement("span");
-      span.textContent = input.value || "";
-      span.style.fontFamily = computed.fontFamily;
-      span.style.fontSize = computed.fontSize;
-      span.style.color = "#000";
-      span.style.background = "transparent";
-      span.style.border = "none";
-      span.style.boxSizing = "border-box";
-      span.style.lineHeight = "1.6";
-
-      if (input.classList.contains("item-desc")) {
-        span.style.display = "block";
-        span.style.width = "100%";
-        span.style.whiteSpace = "pre-wrap";
-        span.style.wordBreak = "break-word";
-        span.style.textAlign = "left";
-        span.style.padding = "2px";
-      } else if (input.classList.contains("item-input-money")) {
-        span.style.display = "block";
-        span.style.width = "100%";
-        span.style.textAlign = "right";
-        span.style.padding = "2px 0";
-      } else if (input.classList.contains("item-input-cant")) {
-        span.style.display = "block";
-        span.style.width = "100%";
-        span.style.textAlign = "center";
-        span.style.padding = "2px 0";
-      } else {
-        // Nombre del cliente y atención
-        span.style.display = "inline-block";
-        span.style.fontSize = "11pt";
-        span.style.borderBottom = "1px solid #000";
-        span.style.paddingBottom = "5px";
-        span.style.paddingTop = "2px";
-        span.style.width = computed.width;
-      }
-
-      input.parentNode.replaceChild(span, input);
-      reemplazos.push({ span, input });
-    });
-
-    // ─── PASO 2: Capturar el PDF ────────────────────────────────────────────
     const mainContent = document.querySelector(".main-content");
     const scrollOffset = mainContent ? mainContent.scrollTop : 0;
 
@@ -173,18 +154,15 @@ export default function Cotizacion({ clientePreCargado }) {
 
     let blob = null;
     try {
-      const worker = html2pdf().set(opciones).from(pageRef.current);
-      blob = await worker.outputPdf("blob");
+      blob = await html2pdf()
+        .set(opciones)
+        .from(pageRef.current)
+        .outputPdf("blob");
     } catch (error) {
       console.error("Error generando PDF:", error);
     } finally {
-      // ─── PASO 3: Restaurar los inputs originales ──────────────────────────
-      // Siempre restauramos, aunque haya fallado la captura
-      reemplazos.forEach(({ span, input }) => {
-        if (span.parentNode) {
-          span.parentNode.replaceChild(input, span);
-        }
-      });
+      // Siempre restauramos el modo edición, aunque haya fallado
+      flushSync(() => setImprimiendo(false));
     }
 
     return blob;
@@ -325,7 +303,8 @@ export default function Cotizacion({ clientePreCargado }) {
         <div className="top-info-row">
           <div>
             <strong>CLIENTE:</strong>
-            <input
+            <CampoImprimible
+              imprimiendo={imprimiendo}
               type="text"
               value={cliente.nombre}
               onChange={(e) =>
@@ -333,6 +312,14 @@ export default function Cotizacion({ clientePreCargado }) {
               }
               maxLength="65"
               placeholder="Nombre del cliente"
+              printStyle={{
+                display: "inline-block",
+                fontSize: "11pt",
+                borderBottom: "1px solid #000",
+                paddingBottom: "5px",
+                paddingTop: "2px",
+                width: "300px",
+              }}
             />
           </div>
           <div>
@@ -342,7 +329,8 @@ export default function Cotizacion({ clientePreCargado }) {
 
         <div className="atencion-row">
           <strong>ATENCIÓN:</strong>
-          <input
+          <CampoImprimible
+            imprimiendo={imprimiendo}
             type="text"
             value={cliente.atencion}
             onChange={(e) =>
@@ -350,6 +338,14 @@ export default function Cotizacion({ clientePreCargado }) {
             }
             maxLength="65"
             placeholder="Persona de contacto"
+            printStyle={{
+              display: "inline-block",
+              fontSize: "11pt",
+              borderBottom: "1px solid #000",
+              paddingBottom: "5px",
+              paddingTop: "2px",
+              width: "400px",
+            }}
           />
         </div>
 
@@ -379,7 +375,8 @@ export default function Cotizacion({ clientePreCargado }) {
                 <tr key={p.id}>
                   <td style={{ textAlign: "center" }}>{index + 1}</td>
                   <td className="col-desc">
-                    <input
+                    <CampoImprimible
+                      imprimiendo={imprimiendo}
                       type="text"
                       className="item-input item-desc"
                       list="lista-servicios-react"
@@ -388,11 +385,20 @@ export default function Cotizacion({ clientePreCargado }) {
                       onChange={(e) =>
                         actualizarPartida(p.id, "concepto", e.target.value)
                       }
+                      printStyle={{
+                        width: "100%",
+                        fontSize: "10pt",
+                        textAlign: "left",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        padding: "2px",
+                      }}
                     />
                   </td>
                   <td>Servicio</td>
                   <td>
-                    <input
+                    <CampoImprimible
+                      imprimiendo={imprimiendo}
                       type="number"
                       className="item-input item-input-cant"
                       min="1"
@@ -401,10 +407,17 @@ export default function Cotizacion({ clientePreCargado }) {
                       onChange={(e) =>
                         actualizarPartida(p.id, "cantidad", e.target.value)
                       }
+                      printStyle={{
+                        width: "100%",
+                        fontSize: "10pt",
+                        textAlign: "center",
+                        padding: "2px 0",
+                      }}
                     />
                   </td>
                   <td>
-                    <input
+                    <CampoImprimible
+                      imprimiendo={imprimiendo}
                       type="number"
                       className="item-input item-input-money"
                       min="0"
@@ -417,15 +430,28 @@ export default function Cotizacion({ clientePreCargado }) {
                           e.target.value,
                         )
                       }
+                      printStyle={{
+                        width: "100%",
+                        fontSize: "10pt",
+                        textAlign: "right",
+                        padding: "2px 0",
+                      }}
                     />
                   </td>
                   <td>
-                    <input
+                    <CampoImprimible
+                      imprimiendo={imprimiendo}
                       type="text"
                       className="item-input item-input-money"
                       value={importeLinea.toFixed(2)}
                       disabled
                       readOnly
+                      printStyle={{
+                        width: "100%",
+                        fontSize: "10pt",
+                        textAlign: "right",
+                        padding: "2px 0",
+                      }}
                     />
                   </td>
                   <td data-html2canvas-ignore="true">
