@@ -305,7 +305,7 @@ export default function Cotizacion({ clientePreCargado }) {
         <div className="header-container">
           <div className="logo-box">
             <img
-              src={getApiUrl("/assets/logo.png")}
+              src={getApiUrl("/assets/logo_nuevo.png")}
               className="logo-img"
               alt="Logo"
               crossOrigin="anonymous"

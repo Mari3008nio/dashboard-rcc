@@ -64,7 +64,7 @@ export default function App() {
     return (
       <div id="pantalla-login">
         <div className="login-box">
-          <img src={getApiUrl("/assets/logo.png")} alt="Logo RC&C" />
+          <img src={getApiUrl("/assets/logo_nuevo.png")} alt="Logo RC&C" />
           <h2 style={{ marginTop: 0, color: "#2c3e50" }}>Acceso al Sistema</h2>
           <input
             type="email"
