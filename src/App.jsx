@@ -5,6 +5,7 @@ import Inicio from "./views/Inicio";
 import Cotizacion from "./views/Cotizacion";
 import Clientes from "./views/Clientes";
 import Catalogo from "./views/Catalogo";
+import { getApiUrl } from "./config";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("rcc_token"));
@@ -28,7 +29,7 @@ export default function App() {
     formData.append("password", password);
 
     try {
-      const response = await fetch("https://astonishing-determination-production.up.railway.app/api/v1/login", {
+      const response = await fetch(getApiUrl("/api/v1/login"), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData,
@@ -63,7 +64,7 @@ export default function App() {
     return (
       <div id="pantalla-login">
         <div className="login-box">
-          <img src="https://astonishing-determination-production.up.railway.app/assets/logo.png" alt="Logo RC&C" />
+          <img src={getApiUrl("/assets/logo.png")} alt="Logo RC&C" />
           <h2 style={{ marginTop: 0, color: "#2c3e50" }}>Acceso al Sistema</h2>
           <input
             type="email"

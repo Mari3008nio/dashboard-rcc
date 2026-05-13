@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { fetchSeguro } from "../utils/api";
 import { UserPlus, Edit, Trash2, Calculator } from "lucide-react";
+import { getApiUrl } from "../config";
 
 export default function Clientes({ onCotizar }) {
   const [clientes, setClientes] = useState([]);
@@ -20,9 +21,7 @@ export default function Clientes({ onCotizar }) {
 
   const cargarDirectorio = async () => {
     try {
-      const respuesta = await fetchSeguro(
-        "https://astonishing-determination-production.up.railway.app/api/v1/clientes/listar",
-      );
+      const respuesta = await fetchSeguro(getApiUrl("/api/v1/clientes/listar"));
       const datos = await respuesta.json();
       setClientes(datos.clientes || []);
     } catch (error) {
@@ -64,12 +63,12 @@ export default function Clientes({ onCotizar }) {
       return alert("Faltan datos obligatorios.");
     }
 
-    let url = "https://astonishing-determination-production.up.railway.app/api/v1/clientes/guardar";
+    let url = getApiUrl("/api/v1/clientes/guardar");
     let method = "POST";
     let peticion = { ...formDatos, rfc: formDatos.rfc.toUpperCase() };
 
     if (formDatos.id) {
-      url = "https://astonishing-determination-production.up.railway.app/api/v1/clientes/actualizar";
+      url = getApiUrl("/api/v1/clientes/actualizar");
       method = "PUT";
       peticion.id_cliente = formDatos.id;
     }
@@ -89,24 +88,24 @@ export default function Clientes({ onCotizar }) {
     }
   };
 
-const borrarCliente = async (id) => {
-  if (!window.confirm("¿Seguro que quieres borrar este cliente?")) return;
-  try {
-    const respuesta = await fetchSeguro(
-      `https://astonishing-determination-production.up.railway.app/api/v1/clientes/borrar/${id}`,
-      { method: "DELETE" },
-    );
-    if (respuesta.ok) {
-      cargarDirectorio();
-    } else {
-      const errorData = await respuesta.json();
-      alert(errorData.detail || "No se pudo borrar el cliente.");
+  const borrarCliente = async (id) => {
+    if (!window.confirm("¿Seguro que quieres borrar este cliente?")) return;
+    try {
+      const respuesta = await fetchSeguro(
+        getApiUrl(`/api/v1/clientes/borrar/${id}`),
+        { method: "DELETE" },
+      );
+      if (respuesta.ok) {
+        cargarDirectorio();
+      } else {
+        const errorData = await respuesta.json();
+        alert(errorData.detail || "No se pudo borrar el cliente.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error de conexión al intentar borrar.");
     }
-  } catch (error) {
-    console.error(error);
-    alert("Error de conexión al intentar borrar.");
-  }
-};
+  };
 
   return (
     <>

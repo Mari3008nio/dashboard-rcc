@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { fetchSeguro } from "../utils/api";
 import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { getApiUrl } from "../config";
 
 export default function Catalogo() {
   const [servicios, setServicios] = useState([]);
@@ -18,7 +19,7 @@ export default function Catalogo() {
   const cargarCatalogo = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "https://astonishing-determination-production.up.railway.app/api/v1/servicios/listar",
+        getApiUrl("/api/v1/servicios/listar"),
       );
       const datos = await respuesta.json();
       setServicios(datos.servicios || []);
@@ -34,7 +35,7 @@ export default function Catalogo() {
       setFormDatos({
         id: serv.id,
         concepto: serv.descripcion,
-        precio: serv.precio,   // valor numérico
+        precio: serv.precio, // valor numérico
       });
     } else {
       setFormDatos({ id: null, concepto: "", precio: "" });
@@ -46,7 +47,7 @@ export default function Catalogo() {
     // Convertir a número de forma segura
     let precioNum = parseFloat(String(formDatos.precio).replace(",", "."));
     if (isNaN(precioNum)) precioNum = 0;
-    
+
     console.log("💾 Guardando servicio:", {
       id: formDatos.id,
       concepto: formDatos.concepto,
@@ -57,7 +58,7 @@ export default function Catalogo() {
       return alert("Concepto y precio válido son requeridos.");
     }
 
-    let url = "https://astonishing-determination-production.up.railway.app/api/v1/servicios/guardar";
+    let url = getApiUrl("/api/v1/servicios/guardar");
     let method = "POST";
     let peticion = {
       concepto: formDatos.concepto,
@@ -65,7 +66,7 @@ export default function Catalogo() {
     };
 
     if (formDatos.id) {
-      url = "https://astonishing-determination-production.up.railway.app/api/v1/servicios/actualizar";
+      url = getApiUrl("/api/v1/servicios/actualizar");
       method = "PUT";
       peticion.id_servicio = formDatos.id;
     }
@@ -97,10 +98,9 @@ export default function Catalogo() {
   const borrarServicio = async (id) => {
     if (window.confirm("¿Seguro que quieres borrar este servicio?")) {
       try {
-        await fetchSeguro(
-          `https://astonishing-determination-production.up.railway.app/api/v1/servicios/borrar/${id}`,
-          { method: "DELETE" },
-        );
+        await fetchSeguro(getApiUrl(`/api/v1/servicios/borrar/${id}`), {
+          method: "DELETE",
+        });
         cargarCatalogo();
       } catch (error) {
         console.error(error);

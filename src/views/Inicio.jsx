@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { fetchSeguro } from "../utils/api";
 import { FileDown } from "lucide-react";
+import { getApiUrl } from "../config";
 
 export default function Inicio() {
   const [historial, setHistorial] = useState([]);
@@ -13,7 +14,7 @@ export default function Inicio() {
   const cargarHistorial = async () => {
     try {
       const respuesta = await fetchSeguro(
-        "https://astonishing-determination-production.up.railway.app/api/v1/cotizaciones/historial",
+        getApiUrl("/api/v1/cotizaciones/historial"),
       );
       const datos = await respuesta.json();
       setHistorial(datos.historial || []);
